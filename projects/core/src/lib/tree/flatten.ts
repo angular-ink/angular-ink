@@ -11,6 +11,22 @@ function exceedsTextLimit(text: string): boolean {
   return textEncoder.encode(text).length > MAX_TEXT_BYTES;
 }
 
+const QUOTED_TEXT_LENGTH = 80;
+const CONTROL_CHARACTER = /[\p{Cc}\p{Cf}]/u;
+
+/** The data as an error may show it: the message reaches a terminal raw, through Node or the app. */
+function quoteForError(text: string): string {
+  let quoted = '';
+  let length = 0;
+  for (const character of text) {
+    if (CONTROL_CHARACTER.test(character)) continue;
+    if (length === QUOTED_TEXT_LENGTH) return `${quoted}…`;
+    quoted += character;
+    length += 1;
+  }
+  return quoted;
+}
+
 const isInkTag = (tag: string): boolean => tag.startsWith('ink-');
 
 /**
@@ -37,7 +53,9 @@ function collect(source: InkNode, target: InkNode, inkParent: string, depth: num
         throw new Error(`angular-ink: text longer than ${String(MAX_TEXT_BYTES)} bytes`);
       }
       if (!holdsText(inkParent)) {
-        throw new Error(`angular-ink: text "${child.text}" must be inside <ink-text>`);
+        throw new Error(
+          `angular-ink: text "${quoteForError(child.text)}" must be inside <ink-text>`,
+        );
       }
       const copy = createNode('text', '', child.text);
       copy.parent = target;

@@ -24,6 +24,39 @@ describe('flattenHosts', () => {
     expect(flat.children[0]?.parent).toBe(flat);
   });
 
+  describe('text outside ink-text', () => {
+    const messageFor = (value: string): string => {
+      try {
+        flattenHosts(el('ink-root', text(value)));
+      } catch (error) {
+        return (error as Error).message;
+      }
+      throw new Error('expected a throw');
+    };
+
+    it('keeps control characters out of the message, which reaches the terminal raw', () => {
+      const message = messageFor('a\x1b[2Jb\x1b]52;c;aGk=\x07c\r\n\t\x7f\x9bd\u009d');
+      // eslint-disable-next-line no-control-regex -- the point of the check
+      expect(message).not.toMatch(/[\x00-\x1f\x7f-\x9f]/);
+      expect(message).toBe('angular-ink: text "a[2Jb]52;c;aGk=cd" must be inside <ink-text>');
+    });
+
+    it('cuts the value to 80 characters, wherever the data ends', () => {
+      expect(messageFor('x'.repeat(1000))).toBe(
+        `angular-ink: text "${'x'.repeat(80)}…" must be inside <ink-text>`,
+      );
+      expect(messageFor('x'.repeat(80))).toBe(
+        `angular-ink: text "${'x'.repeat(80)}" must be inside <ink-text>`,
+      );
+    });
+
+    it('does not split a character at the cut', () => {
+      expect(messageFor('😀'.repeat(100))).toBe(
+        `angular-ink: text "${'😀'.repeat(80)}…" must be inside <ink-text>`,
+      );
+    });
+  });
+
   it('drops comments', () => {
     const flat = flattenHosts(el('ink-root', comment(), el('ink-text', comment(), text('x'))));
     expect(flat.children).toHaveLength(1);
