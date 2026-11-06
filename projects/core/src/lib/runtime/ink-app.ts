@@ -180,6 +180,7 @@ export class InkApp implements InkRuntime {
     this.exitPromise.catch(() => undefined);
 
     this.removeExitHooks = installExitHooks(() => {
+      this.drawLastFrameOnExit();
       this.restore();
     });
     if (options.patchConsole) {
@@ -539,6 +540,14 @@ export class InkApp implements InkRuntime {
     if (grid === null) return;
     if (this.drawsInPlace && this.log.isClearedFrame(grid)) return;
     this.show(grid, { unmounting });
+  }
+
+  // A process that ends with the app still running gets the same last frame as an unmount, only
+  // with no change detection: there is no more time for an app that may be why it is dying.
+  private drawLastFrameOnExit(): void {
+    if (this.phase !== 'running' || this.portClosed || !this.drawsInPlace) return;
+    const grid = this.paint();
+    if (grid !== null) this.show(grid, { unmounting: this.lastFrameRedraws() });
   }
 
   // After static output Ink draws a last frame only if one is pending, or static rows would repeat.

@@ -8,7 +8,7 @@ import {
   type OnInit,
 } from '@angular/core';
 import xterm from '@xterm/headless';
-import { Writable } from 'node:stream';
+import { PassThrough, Writable } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InkBox, InkText } from '../elements';
 import { injectApp, injectStderr, injectStdout, injectWindowSize } from './inject';
@@ -1171,5 +1171,29 @@ describe('public API', () => {
         'ɵgridToString',
       ].sort(),
     );
+  });
+});
+
+describe('renderInk when the process ends with the app still running', () => {
+  it('draws the last frame on the way out, as an unmount would', async () => {
+    const on = vi.spyOn(process, 'on');
+    const stdout = new FakeTerminal(10, 3);
+    const stdin = new PassThrough();
+    @Component({
+      imports: [InkText],
+      template: `<ink-text>a{{ '\\n' }}b{{ '\\n' }}c</ink-text>`,
+    })
+    class Filling {}
+    const app = await renderInk(Filling, { stdout, stdin, interactive: true, patchConsole: false });
+    await app.waitUntilRenderFlush();
+    const before = stdout.output.length;
+    const onExit = on.mock.calls.find(([event]) => event === 'exit')?.[1] as () => void;
+    onExit();
+    await new Promise((resolve) => {
+      stdout.write('', resolve);
+    });
+    expect(stdout.output.slice(before)).toContain('\x1b[1;1H\x1b[J');
+    expect(stdout.output.endsWith('\x1b[?25h')).toBe(true);
+    app.unmount();
   });
 });
