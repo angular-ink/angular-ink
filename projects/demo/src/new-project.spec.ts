@@ -88,6 +88,21 @@ describe('new-project', () => {
     expect(fieldLine(test, 'Name')).not.toContain('line one');
   });
 
+  it('says it needs a terminal and fails where no key can come', async () => {
+    const test = await renderForTest(NewProject, { isTty: false });
+    await expect(test.waitUntilExit()).rejects.toThrow('new-project needs a terminal');
+    expect(test.lastFrame()).toContain('new-project needs a terminal');
+    expect(test.lastFrame()).not.toContain('Description');
+  });
+
+  it('erases a whole character with Backspace', async () => {
+    const test = await renderForTest(NewProject);
+    await test.stdin.write('a👨‍👩‍👧');
+    await test.stdin.press('backspace');
+    expect(fieldLine(test, 'Name')).toContain('a');
+    expect(fieldLine(test, 'Name')).not.toContain('👧');
+  });
+
   it('prints the result and exits on Enter with valid data', async () => {
     const test = await renderForTest(NewProject);
     await test.stdin.write('my-app');

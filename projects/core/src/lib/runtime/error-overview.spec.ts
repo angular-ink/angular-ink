@@ -100,6 +100,21 @@ describe('describeError', () => {
     expect(view.message).toBe('boom');
   });
 
+  it('keeps an excerpt with a line of exactly the limit, and drops it one past', () => {
+    const atLimit = join(dir, 'at-limit.js');
+    writeFileSync(atLimit, 'x'.repeat(500));
+    expect(describeError(errorAt(atLimit, 1, 1), dir).excerpt).toHaveLength(1);
+    const pastLimit = join(dir, 'past-limit.js');
+    writeFileSync(pastLimit, 'x'.repeat(501));
+    expect(describeError(errorAt(pastLimit, 1, 1), dir).excerpt).toBeNull();
+  });
+
+  it('drops the excerpt for a long line beside the origin too', () => {
+    const neighbour = join(dir, 'neighbour.js');
+    writeFileSync(neighbour, `short\n${'x'.repeat(501)}\nshort`);
+    expect(describeError(errorAt(neighbour, 1, 1), dir).excerpt).toBeNull();
+  });
+
   it('lists the stack, with parsed frames tidied and the others left as they are', () => {
     const error = new Error('boom');
     error.stack = `Error: boom\n    at run (${dir}/app.js:1:2)\n    at ${dir}/app.js:3:4\n    at native`;
@@ -129,6 +144,16 @@ describe('describeError', () => {
 });
 
 describe('paintErrorOverview', () => {
+  it('gives each excerpt line one row, so long lines keep the message on the screen', () => {
+    const long = join(dir, 'long-lines.js');
+    writeFileSync(long, Array.from({ length: 7 }, () => 'x'.repeat(499)).join('\n'));
+    const grid = paintErrorOverview(errorAt(long, 4, 1), 80, yoga);
+    expect(grid.rows).toBeLessThanOrEqual(24);
+    const rows = gridToString(grid, { ansi: false }).split('\n');
+    expect(rows.filter((row) => row.includes('xxx'))).toHaveLength(7);
+    expect(rows[1]).toContain('boom');
+  });
+
   it('paints the label, the message, the location, the excerpt and the stack', () => {
     const text = gridToString(paintErrorOverview(errorAt(sourcePath, 5, 2), 120, yoga), {
       ansi: false,

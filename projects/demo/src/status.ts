@@ -5,12 +5,11 @@ import {
   injectApp,
   injectInput,
   injectStdin,
-  injectStdout,
   injectWindowSize,
   renderInk,
 } from '@angular-ink/core';
-import { readFileSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
+import { readFileSync, realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 export interface Service {
   readonly name: string;
@@ -108,10 +107,8 @@ export class Status {
   protected readonly colors = STATE_COLORS;
   protected readonly size = injectWindowSize();
   protected readonly showRegion = computed(() => this.size().columns >= MIN_COLUMNS_FOR_REGION);
-  /** With stdout in a pipe nobody sees the table change, so no key is worth waiting for. */
-  protected readonly live =
-    (injectStdout().stdout as Partial<NodeJS.WriteStream>).isTTY === true &&
-    injectStdin().isRawModeSupported;
+  /** Where no key can come, as in a pipe or in CI, it prints the table and ends. */
+  protected readonly live = injectStdin().isRawModeSupported;
 
   private readonly app = injectApp();
 
@@ -137,6 +134,8 @@ async function main(): Promise<void> {
   await app.waitUntilExit();
 }
 
-if (process.argv[1] !== undefined && pathToFileURL(process.argv[1]).href === import.meta.url) {
+// Through a symlink, as npm runs a command, argv[1] is the link.
+const invokedPath = process.argv[1];
+if (invokedPath !== undefined && realpathSync(invokedPath) === fileURLToPath(import.meta.url)) {
   await main();
 }

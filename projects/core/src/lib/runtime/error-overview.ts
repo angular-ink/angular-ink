@@ -39,7 +39,7 @@ export interface ErrorView {
 }
 
 const EXCERPT_AROUND = 3;
-// A line this long means a minified bundle, whose source is no use to the reader of the overview.
+// A line over this is taken for a minified bundle, whose source is no use to a reader.
 const EXCERPT_MAX_LINE = 500;
 
 /** Parses `at fn (file:line:column)` or `at file:line:column`, or returns null for anything else. */
@@ -160,6 +160,7 @@ function stackEntry(line: string, cwd: string): StackEntry {
                 >
               </ink-box>
               <ink-text
+                wrap="truncate-end"
                 [backgroundColor]="row.isOrigin ? 'red' : undefined"
                 [color]="row.isOrigin ? 'white' : undefined"
                 >{{ ' ' + row.value }}</ink-text

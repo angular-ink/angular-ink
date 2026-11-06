@@ -98,9 +98,8 @@ describe('status', () => {
     await expect(test.waitUntilExit()).resolves.toBeUndefined();
   });
 
-  it('waits for no key when stdout is a pipe, even with stdin on a terminal', async () => {
-    // By default the fake stdin is a TTY and the fake stdout is not.
-    const test = await renderForTest(Status);
+  it('waits for no key where none can come', async () => {
+    const test = await renderForTest(Status, { isTty: false });
     expect(test.stdin.isRaw).toBe(false);
     expect(test.lastFrame()).not.toContain('q to quit');
   });

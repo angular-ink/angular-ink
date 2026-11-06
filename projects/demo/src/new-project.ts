@@ -14,9 +14,11 @@ import {
   injectFocus,
   injectInput,
   injectPaste,
+  injectStdin,
   renderInk,
 } from '@angular-ink/core';
-import { pathToFileURL } from 'node:url';
+import { realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const KEBAB_CASE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const CONTROL_CHARACTERS = /\p{Cc}/gu;
@@ -85,7 +87,9 @@ export interface ProjectInfo {
   imports: [InkBox, InkText, TextField],
   template: `
     <ink-box flexDirection="column">
-      @if (created(); as project) {
+      @if (!canType) {
+        <ink-text color="red">{{ noTerminal.message }}</ink-text>
+      } @else if (created(); as project) {
         <ink-text color="green">Created {{ project.name }}: {{ project.description }}</ink-text>
       } @else {
         <ink-text bold>New project</ink-text>
@@ -100,6 +104,8 @@ export interface ProjectInfo {
   `,
 })
 export class NewProject {
+  protected readonly canType = injectStdin().isRawModeSupported;
+  protected readonly noTerminal = new Error('new-project needs a terminal');
   protected readonly name = signal('');
   protected readonly description = signal('');
   protected readonly created = signal<ProjectInfo | null>(null);
@@ -114,6 +120,8 @@ export class NewProject {
     injectInput((_text, key) => {
       if (key.return) this.confirm();
     });
+    // No key will ever come to fill the form in, so it ends here and says why.
+    if (!this.canType) this.app.exit(this.noTerminal);
   }
 
   private confirm(): void {
@@ -127,9 +135,13 @@ export class NewProject {
 
 async function main(): Promise<void> {
   const app = await renderInk(NewProject);
-  await app.waitUntilExit();
+  await app.waitUntilExit().catch(() => {
+    process.exitCode = 1;
+  });
 }
 
-if (process.argv[1] !== undefined && pathToFileURL(process.argv[1]).href === import.meta.url) {
+// Through a symlink, as npm runs a command, argv[1] is the link.
+const invokedPath = process.argv[1];
+if (invokedPath !== undefined && realpathSync(invokedPath) === fileURLToPath(import.meta.url)) {
   await main();
 }

@@ -1,14 +1,13 @@
 // Builds a hello app the way a user does, on the packed core, and judges its cold start.
-import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pathToFileURL } from 'node:url';
+import { installPackedCore, REPO, run } from './packed-core.mjs';
 
 const MAX_MEDIAN_MS = 150;
 const MAX_BYTES = 1_000_000;
 const RUNS = 10;
-
-const REPO = fileURLToPath(new URL('../', import.meta.url));
 
 const HELLO = `
 import { Component } from '@angular/core';
@@ -40,19 +39,6 @@ export function median(values) {
   const sorted = values.toSorted((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);
   return sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
-}
-
-function run(command, args, cwd = REPO) {
-  execFileSync(command, args, { cwd, stdio: ['ignore', 'ignore', 'inherit'] });
-}
-
-/** Installs the packed core by hand: everything else resolves from the repo's node_modules. */
-function installPackedCore(fixture) {
-  run('npm', ['pack', join(REPO, 'dist/core'), '--pack-destination', fixture, '--silent'], fixture);
-  const tarball = readdirSync(fixture).find((name) => name.endsWith('.tgz'));
-  const installed = join(fixture, 'node_modules/@angular-ink/core');
-  mkdirSync(installed, { recursive: true });
-  run('tar', ['-xzf', join(fixture, tarball), '-C', installed, '--strip-components=1']);
 }
 
 function timeOneRun(out) {

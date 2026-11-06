@@ -11,6 +11,7 @@ import { InkText } from '../elements';
 import { renderInk, type Instance } from '../runtime/render-ink';
 import { renderInkToString } from '../runtime/render-to-string';
 import { injectApp } from '../runtime/inject';
+import { injectFocus } from './inject-focus';
 import { injectInput, injectPaste, injectStdin } from './inject-input';
 import type { Key } from './key';
 import { MAX_PASTE_BYTES } from './key-parser';
@@ -273,6 +274,7 @@ describe('injectInput', () => {
       stdout: new Sink(),
       stderr: new Sink(),
       stdin,
+      interactive: true,
       patchConsole: false,
     });
     stdin.write('a');
@@ -478,6 +480,7 @@ describe('injectInput', () => {
         stdout: new Sink(),
         stderr: new Sink(),
         stdin: stdin as unknown as NodeJS.ReadableStream,
+        interactive: true,
         patchConsole: false,
       });
       await stdin.press('ctrl+c');
@@ -522,6 +525,7 @@ describe('injectInput', () => {
         stdout: new Sink(),
         stderr: new Sink(),
         stdin: stdin as unknown as NodeJS.ReadableStream,
+        interactive: true,
         patchConsole: false,
       });
       await stdin.write('x');
@@ -681,6 +685,7 @@ describe('injectInput', () => {
         stdout,
         stderr,
         stdin: stdin as unknown as NodeJS.ReadableStream,
+        interactive: true,
         patchConsole: false,
       };
       vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
@@ -926,6 +931,7 @@ describe('injectPaste', () => {
       stdout,
       stderr: new Sink(),
       stdin: stdin as unknown as NodeJS.ReadableStream,
+      interactive: true,
       patchConsole: false,
     });
     await stdin.write('\x1b[200~x\x1b[201~');
@@ -955,6 +961,71 @@ describe('a paste over the limit', () => {
     await test.stdin.write(`\x1b[200~${big}\x1b[201~`);
     expect(pasted.map((text) => text.length)).toEqual([MAX_PASTE_BYTES, MAX_PASTE_BYTES]);
     expect(test.stderr.writes.filter((text) => text.includes('paste'))).toHaveLength(1);
+  });
+});
+
+describe('a non-interactive app with a terminal on stdin', () => {
+  @Component({
+    selector: 'ink-test-focusable',
+    imports: [InkText],
+    template: `<ink-text>{{ focus.isFocused() ? 'focused' : 'blurred' }}</ink-text>`,
+  })
+  class Focusable {
+    readonly focus = injectFocus({ autoFocus: true });
+  }
+
+  const start = async (component: Parameters<typeof renderInk>[0]) => {
+    const stdin = new FakeStdin();
+    const stderr = new Sink();
+    const app = await renderInk(component, {
+      stdout: new Sink(),
+      stderr,
+      stdin: stdin as unknown as NodeJS.ReadableStream,
+      interactive: false,
+      patchConsole: false,
+    });
+    await app.waitUntilRenderFlush();
+    return { app, stdin, stderr };
+  };
+
+  it('leaves injectInput inactive, with one warning, and ends by itself', async () => {
+    const { app, stdin, stderr } = await start(Keys);
+    await stdin.write('a');
+    expect(seen).toEqual([]);
+    expect(stdin.isRaw).toBe(false);
+    expect(stdin.listenerCount('readable')).toBe(0);
+    expect(stderr.text).toBe('angular-ink: this app is not interactive; injectInput is inactive\n');
+    const exited = app.waitUntilExit();
+    process.emit('beforeExit', 0);
+    await expect(exited).resolves.toBeUndefined();
+  });
+
+  it('leaves injectPaste inactive', async () => {
+    const { app, stdin } = await start(Paste);
+    await stdin.write('\x1b[200~x\x1b[201~');
+    expect(pasted).toEqual([]);
+    expect(stdin.isRaw).toBe(false);
+    app.unmount();
+    await app.waitUntilExit();
+  });
+
+  it('leaves injectFocus without a key listener', async () => {
+    const { app, stdin } = await start(Focusable);
+    expect(stdin.isRaw).toBe(false);
+    expect(stdin.listenerCount('readable')).toBe(0);
+    app.unmount();
+    await app.waitUntilExit();
+  });
+
+  it('reports raw mode as unsupported', async () => {
+    const { app } = await start(StdinProbe);
+    const { terminal } = StdinProbe.last;
+    expect(terminal.isRawModeSupported).toBe(false);
+    expect(() => {
+      terminal.setRawMode(true);
+    }).toThrow(/^angular-ink: raw mode is not supported/);
+    app.unmount();
+    await app.waitUntilExit();
   });
 });
 

@@ -1,6 +1,24 @@
-import { Component, DestroyRef, computed, effect, inject, input, signal } from '@angular/core';
-import { InkBox, InkStatic, InkText, injectApp, injectInput, renderInk } from '@angular-ink/core';
-import { pathToFileURL } from 'node:url';
+import {
+  Component,
+  DestroyRef,
+  computed,
+  effect,
+  inject,
+  input,
+  signal,
+  type OnInit,
+} from '@angular/core';
+import {
+  InkBox,
+  InkStatic,
+  InkText,
+  injectApp,
+  injectInput,
+  injectStdin,
+  renderInk,
+} from '@angular-ink/core';
+import { realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const ENVIRONMENTS = ['staging', 'prod'] as const;
 const FAILING_STEP = 'Run migrations';
@@ -61,7 +79,7 @@ class Spinner {
     </ink-box>
   `,
 })
-export class Deploy {
+export class Deploy implements OnInit {
   readonly stepMs = input(300);
   readonly fail = input(false);
 
@@ -72,6 +90,7 @@ export class Deploy {
   protected readonly running = computed(() => DEPLOY_STEPS[this.finished().length] ?? null);
 
   private readonly app = injectApp();
+  private readonly canChoose = injectStdin().isRawModeSupported;
   private readonly failure = signal<Error | null>(null);
   private timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -94,6 +113,11 @@ export class Deploy {
     inject(DestroyRef).onDestroy(() => {
       clearTimeout(this.timer);
     });
+  }
+
+  ngOnInit(): void {
+    // Nobody can answer the list in a pipe or in CI, so it takes the first environment.
+    if (!this.canChoose) this.start();
   }
 
   private start(): void {
@@ -127,6 +151,8 @@ async function main(): Promise<void> {
   });
 }
 
-if (process.argv[1] !== undefined && pathToFileURL(process.argv[1]).href === import.meta.url) {
+// Through a symlink, as npm runs a command, argv[1] is the link.
+const invokedPath = process.argv[1];
+if (invokedPath !== undefined && realpathSync(invokedPath) === fileURLToPath(import.meta.url)) {
   await main();
 }

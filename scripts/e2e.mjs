@@ -1,37 +1,15 @@
 // Builds the demo apps the way a user does, on the packed core, and runs them in real ptys.
 //
 //   ./scripts/dev node scripts/e2e.mjs [--update]
-import { execFileSync } from 'node:child_process';
-import {
-  copyFileSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pathToFileURL } from 'node:url';
 import { runScenario } from '../e2e/pty-screen.mjs';
 import { createScenarios } from '../e2e/scenarios.mjs';
+import { installPackedCore, REPO, run } from './packed-core.mjs';
 
-const REPO = fileURLToPath(new URL('../', import.meta.url));
 const EXPECTED = join(REPO, 'e2e/expected');
 const APPS = { deploy: 'deploy', newProject: 'new-project', status: 'status' };
-
-function run(command, args, cwd = REPO) {
-  execFileSync(command, args, { cwd, stdio: ['ignore', 'ignore', 'inherit'] });
-}
-
-/** Installs the packed core by hand: everything else resolves from the repo's node_modules. */
-function installPackedCore(fixture) {
-  run('npm', ['pack', join(REPO, 'dist/core'), '--pack-destination', fixture, '--silent'], fixture);
-  const tarball = readdirSync(fixture).find((name) => name.endsWith('.tgz'));
-  const installed = join(fixture, 'node_modules/@angular-ink/core');
-  mkdirSync(installed, { recursive: true });
-  run('tar', ['-xzf', join(fixture, tarball), '-C', installed, '--strip-components=1']);
-}
 
 async function buildApps(fixture) {
   run('npm', ['run', '--silent', 'build:core']);

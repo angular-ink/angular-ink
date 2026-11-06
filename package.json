@@ -46,6 +46,7 @@
     "lint-staged": "^17.6.0",
     "ng-packagr": "^22.2.5",
     "prettier": "^3.8.1",
+    "string-width": "^8.3.0",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.72.1",
     "vitest": "^5.0.0"

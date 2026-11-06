@@ -352,13 +352,14 @@ export class InkApp implements InkRuntime {
     );
   }
 
+  /** A non-interactive app takes no keys, even with a terminal on stdin. */
   get isRawModeSupported(): boolean {
-    return this.rawMode.supported;
+    return this.options.interactive && this.rawMode.supported;
   }
 
   setRawMode(enabled: boolean): void {
     if (this.phase !== 'running') return;
-    if (!this.rawMode.supported) {
+    if (!this.isRawModeSupported) {
       throw new Error(
         'angular-ink: raw mode is not supported on this stdin; check isRawModeSupported first',
       );
@@ -393,10 +394,11 @@ export class InkApp implements InkRuntime {
 
   private canListen(caller: string): boolean {
     if (this.phase !== 'running') return false;
-    if (this.rawMode.supported) return true;
+    if (this.isRawModeSupported) return true;
     if (!this.warnedAboutInput && isDevMode()) {
       this.warnedAboutInput = true;
-      this.writeStderr(`angular-ink: stdin is not a TTY; ${caller} is inactive\n`);
+      const reason = this.rawMode.supported ? 'this app is not interactive' : 'stdin is not a TTY';
+      this.writeStderr(`angular-ink: ${reason}; ${caller} is inactive\n`);
     }
     return false;
   }

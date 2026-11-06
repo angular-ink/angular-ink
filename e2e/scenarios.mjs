@@ -1,7 +1,7 @@
 // What the three apps must do in a real terminal. A scenario with `expected` is also compared with
 // `e2e/expected/<name>.txt`, and `check` has the rest. Each item of the review focus has some here.
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DONE_MARKER } from './pty-screen.mjs';
 
@@ -72,7 +72,7 @@ function hostileServices() {
     { name: 'clip\x1b]52;c;ZXZpbA==\x07board', region: 'eu-west', state: 'ok', latencyMs: 2 },
     { name: 'home\x1b[Hrow', region: 'us-east', state: 'ok', latencyMs: 3 },
     { name: 'return\rcarriage', region: 'us-east', state: 'degraded', latencyMs: 4 },
-    { name: 'zero​width', region: 'ap-south', state: 'ok', latencyMs: 5 },
+    { name: 'zero\u200bwidth', region: 'ap-south', state: 'ok', latencyMs: 5 },
     {
       name: '決済サービスの長い長い長い長い長い長い長い長い長い長い名前',
       region: '東京',
@@ -120,6 +120,12 @@ export function createScenarios(bundles, folder) {
   const dataFile = (name, services) => {
     const path = join(folder, `${name}.json`);
     writeFileSync(path, JSON.stringify(services));
+    return path;
+  };
+
+  const linkTo = (target, name) => {
+    const path = join(folder, name);
+    symlinkSync(target, path);
     return path;
   };
 
@@ -174,6 +180,8 @@ export function createScenarios(bundles, folder) {
   };
 
   const pipeStderr = stderrOf('status-cat');
+  const deployCatStderr = stderrOf('deploy-cat');
+  const symlinkStderr = stderrOf('status-symlink');
   const headStderr = stderrOf('status-head');
   const bigHeadStderr = stderrOf('status-head-big');
   const closedStdinStderr = stderrOf('new-project-stdin-closed');
@@ -228,7 +236,6 @@ export function createScenarios(bundles, folder) {
         session.sendKeys(ENTER);
         await session.waitForText('use kebab-case');
         session.sendKeys('\x7f'.repeat('Olá Mundo'.length));
-        await session.waitForText('Name');
         session.sendKeys('my-app');
         await session.waitForText('my-app');
         session.sendKeys(TAB);
@@ -299,8 +306,8 @@ export function createScenarios(bundles, folder) {
       file: 'bash',
       args: ['-c', `echo oi | ${shellLine([process.execPath, bundles.newProject])}`],
       check: ({ exitCode, raw, screen }) => {
-        assert.equal(exitCode, 0);
-        assert.match(screen, /New project/);
+        assert.equal(exitCode, 1);
+        assert.match(screen, /new-project needs a terminal/);
         assert.doesNotMatch(screen, /^\s+at /m);
         assert.ok(raw.endsWith(SHOW_CURSOR));
       },
@@ -314,9 +321,69 @@ export function createScenarios(bundles, folder) {
         `${shellLine([process.execPath, bundles.newProject])} <&- 2>${quote(closedStdinStderr)}`,
       ],
       check: ({ exitCode, screen }) => {
-        assert.equal(exitCode, 0);
-        assert.match(screen, /New project/);
+        assert.equal(exitCode, 1);
+        assert.match(screen, /new-project needs a terminal/);
         assert.equal(readFile(closedStdinStderr), '');
+      },
+    },
+    {
+      name: 'status-ci',
+      limitMs: 5000,
+      file: process.execPath,
+      args: [bundles.status],
+      env: { CI: '1' },
+      check: ({ exitCode, raw, screen }) => {
+        assert.equal(exitCode, 0);
+        assert.match(screen, /api-gateway/);
+        assert.doesNotMatch(screen, /q to quit/);
+        assert.ok(!raw.includes(HIDE_CURSOR), 'a non-interactive app hid the cursor');
+      },
+    },
+    {
+      name: 'deploy-ci',
+      limitMs: 5000,
+      file: process.execPath,
+      args: [bundles.deploy],
+      env: { CI: '1' },
+      check: ({ exitCode, screen }) => {
+        assert.equal(exitCode, 0);
+        assert.match(screen, /✔ Switch traffic/);
+        assert.match(screen, /Deployed to staging/);
+      },
+    },
+    {
+      name: 'new-project-ci',
+      limitMs: 5000,
+      file: process.execPath,
+      args: [bundles.newProject],
+      env: { CI: '1' },
+      check: ({ exitCode, screen }) => {
+        assert.equal(exitCode, 1);
+        assert.match(screen, /new-project needs a terminal/);
+        assert.doesNotMatch(screen, /^\s+at /m);
+      },
+    },
+    {
+      name: 'deploy-cat',
+      limitMs: 5000,
+      ...piped([bundles.deploy], 'cat', deployCatStderr),
+      check: ({ exitCode, raw }) => {
+        assert.equal(exitCode, 0);
+        assert.ok(!raw.includes('\x1b'), 'a pipe got escape sequences');
+        assert.match(raw, /✔ Build image\r?\n✔ Run migrations\r?\n✔ Switch traffic/);
+        assert.match(raw, /Deployed to staging/);
+        assert.equal(readFile(deployCatStderr), '');
+      },
+    },
+    {
+      // How npm runs a command: argv[1] is the link, and the module knows its real path.
+      name: 'status-symlink',
+      limitMs: 5000,
+      ...piped([linkTo(bundles.status, 'status-link.mjs')], 'cat', symlinkStderr),
+      check: ({ exitCode, raw }) => {
+        assert.equal(exitCode, 0);
+        assert.match(raw, /api-gateway/);
+        assert.equal(readFile(symlinkStderr), '');
       },
     },
     {
@@ -326,8 +393,8 @@ export function createScenarios(bundles, folder) {
       file: 'bash',
       args: ['-c', `${shellLine([process.execPath, bundles.newProject])} < <(sleep 10)`],
       check: ({ exitCode, screen }) => {
-        assert.equal(exitCode, 0);
-        assert.match(screen, /New project/);
+        assert.equal(exitCode, 1);
+        assert.match(screen, /new-project needs a terminal/);
       },
     },
     {
@@ -422,7 +489,7 @@ export function createScenarios(bundles, folder) {
         assert.ok(!raw.includes('\x1b]52'), 'the clipboard write reached the terminal');
         assertNumbersKept(history, 40);
         for (const clean of ['clearscreen', 'clipboard', 'homerow', 'zerowidth']) {
-          assert.ok(screen.replaceAll('​', '').includes(clean), `no ${clean}:\n${screen}`);
+          assert.ok(screen.replaceAll('\u200b', '').includes(clean), `no ${clean}:\n${screen}`);
         }
         const separators = columnsOf('│').filter((columns) => columns.length > 0);
         assert.equal(separators.length, 7);

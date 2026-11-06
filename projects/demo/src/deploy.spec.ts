@@ -62,6 +62,13 @@ describe('deploy', () => {
     expect(frameOf(test)).not.toMatch(SPINNER);
   });
 
+  it('deploys to the first environment by itself where no key can come', async () => {
+    const test = await renderForTest(Deploy, { isTty: false, inputs: { stepMs: 1 } });
+    await test.waitUntilExit();
+    expect(frameOf(test)).not.toContain('Deploy to which environment?');
+    expect(frameOf(test)).toContain('Deployed to staging');
+  });
+
   it('ends on the ErrorOverview and rejects with --fail', async () => {
     const test = await renderForTest(Deploy, { inputs: { stepMs: 1, fail: true } });
     await test.stdin.press('enter');
