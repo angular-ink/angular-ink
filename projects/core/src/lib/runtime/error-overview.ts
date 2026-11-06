@@ -39,7 +39,7 @@ export interface ErrorView {
 }
 
 const EXCERPT_AROUND = 3;
-// A minified bundle can hold one enormous line, and the text limit would fail the whole overview.
+// A line this long means a minified bundle, whose source is no use to the reader of the overview.
 const EXCERPT_MAX_LINE = 500;
 
 /** Parses `at fn (file:line:column)` or `at file:line:column`, or returns null for anything else. */
@@ -110,9 +110,11 @@ function readExcerpt(frame: StackFrame, cwd: string): readonly ExcerptLine[] | n
   if (frame.line > lines.length) return null;
   const first = Math.max(frame.line - EXCERPT_AROUND - 1, 0);
   const last = Math.min(frame.line + EXCERPT_AROUND, lines.length);
-  return lines.slice(first, last).map((value, index) => ({
+  const around = lines.slice(first, last);
+  if (around.some((value) => value.length > EXCERPT_MAX_LINE)) return null;
+  return around.map((value, index) => ({
     line: first + index + 1,
-    value: value.slice(0, EXCERPT_MAX_LINE).replaceAll('\t', '  '),
+    value: value.replaceAll('\t', '  '),
     isOrigin: first + index + 1 === frame.line,
   }));
 }

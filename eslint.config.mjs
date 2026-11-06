@@ -50,6 +50,16 @@ export default tseslint.config(
     },
   },
   {
+    // The demo apps are user code: an `ink-*` host would be a layout node, and only the library's are.
+    files: ['projects/demo/src/**/*.ts'],
+    rules: {
+      '@angular-eslint/component-selector': [
+        'error',
+        { type: 'element', prefix: 'demo', style: 'kebab-case' },
+      ],
+    },
+  },
+  {
     // ɵINJECTOR_SCOPE is the one private Angular symbol the project uses, read in one file only.
     files: [`${lib}/**/*.ts`],
     ignores: [`${lib}/platform/angular-private.ts`, `${lib}/**/*.spec.ts`],

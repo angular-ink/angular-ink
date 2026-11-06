@@ -91,11 +91,13 @@ describe('describeError', () => {
     expect(describeError(errorAt(sourcePath, 999, 1), dir).excerpt).toBeNull();
   });
 
-  it('cuts a very long source line, so the excerpt stays inside the text limit', () => {
+  it('shows no excerpt of a minified file', () => {
     const minified = join(dir, 'min.js');
     writeFileSync(minified, 'x'.repeat(2_000_000));
     const view = describeError(errorAt(minified, 1, 1), dir);
-    expect(view.excerpt?.[0]?.value.length).toBeLessThan(1000);
+    // Its lines say nothing to a reader, and would push the message off the screen.
+    expect(view.excerpt).toBeNull();
+    expect(view.message).toBe('boom');
   });
 
   it('lists the stack, with parsed frames tidied and the others left as they are', () => {

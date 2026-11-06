@@ -9,6 +9,7 @@
     "projects/core/src/**/*.spec.ts",
     "projects/core/src/testing/**/*.ts",
     "projects/testing/src/**/*.spec.ts",
-    "projects/cli/src/**/*.spec.ts"
+    "projects/cli/src/**/*.spec.ts",
+    "projects/demo/src/**/*.ts"
   ]
 }

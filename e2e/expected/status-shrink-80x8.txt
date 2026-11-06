@@ -1,0 +1,7 @@
+│ billing                                    │ eu-west    │ ok       │   87 ms │
+│ catalog                                    │ us-east    │ degraded │  640 ms │
+│ notifications                              │ us-east    │ ok       │   55 ms │
+│ search                                     │ ap-south   │ down     │       - │
+│ worker                                     │ ap-south   │ ok       │   12 ms │
+╰──────────────────────────────────────────────────────────────────────────────╯
+80x8 · q to quit

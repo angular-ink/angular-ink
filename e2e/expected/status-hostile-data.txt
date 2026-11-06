@@ -1,0 +1,23 @@
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ Service                                    │ Region     │ State    │ Latency │
+│ clearscreen                                │ eu-west    │ ok       │    1 ms │
+│ clipboard                                  │ eu-west    │ ok       │    2 ms │
+│ homerow                                    │ us-east    │ ok       │    3 ms │
+│ returncarriage                             │ us-east    │ degraded │    4 ms │
+│ zerowidth                                  │ ap-south   │ ok       │    5 ms │
+│ 決済サービスの長い長い長い長い長い長い長…  │ 東京       │ down     │       - │
+╰──────────────────────────────────────────────────────────────────────────────╯
+80x24 · q to quit

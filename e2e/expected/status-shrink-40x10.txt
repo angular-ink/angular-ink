@@ -1,0 +1,9 @@
+│ Service         │ State    │ Latency │
+│ api-gateway     │ ok       │   42 ms │
+│ billing         │ ok       │   87 ms │
+│ catalog         │ degraded │  640 ms │
+│ notifications   │ ok       │   55 ms │
+│ search          │ down     │       - │
+│ worker          │ ok       │   12 ms │
+╰──────────────────────────────────────╯
+40x10 · q to quit

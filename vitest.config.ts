@@ -32,6 +32,7 @@ export default defineConfig({
       'projects/core/src/**/*.spec.ts',
       'projects/testing/src/**/*.spec.ts',
       'projects/cli/src/**/*.spec.ts',
+      'projects/demo/src/**/*.spec.ts',
       'scripts/*.spec.mjs',
     ],
     coverage: {

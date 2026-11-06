@@ -34,6 +34,7 @@
     { "path": "./projects/testing/tsconfig.lib.json" },
     { "path": "./projects/testing/tsconfig.spec.json" },
     { "path": "./projects/cli/tsconfig.json" },
-    { "path": "./projects/cli/tsconfig.spec.json" }
+    { "path": "./projects/cli/tsconfig.spec.json" },
+    { "path": "./projects/demo/tsconfig.json" }
   ]
 }

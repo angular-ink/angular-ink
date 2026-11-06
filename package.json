@@ -11,7 +11,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
-    "typecheck": "tsc -p projects/core/tsconfig.lib.json --noEmit && tsc -p projects/core/tsconfig.spec.json --noEmit && tsc -p projects/testing/tsconfig.lib.json --noEmit && tsc -p projects/testing/tsconfig.spec.json --noEmit && tsc -p projects/cli/tsconfig.json --noEmit && tsc -p projects/cli/tsconfig.spec.json --noEmit",
+    "typecheck": "tsc -p projects/core/tsconfig.lib.json --noEmit && tsc -p projects/core/tsconfig.spec.json --noEmit && tsc -p projects/testing/tsconfig.lib.json --noEmit && tsc -p projects/testing/tsconfig.spec.json --noEmit && tsc -p projects/cli/tsconfig.json --noEmit && tsc -p projects/cli/tsconfig.spec.json --noEmit && tsc -p projects/demo/tsconfig.json --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "prepare": "husky || true"

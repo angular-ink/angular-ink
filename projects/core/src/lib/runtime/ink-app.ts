@@ -551,6 +551,9 @@ export class InkApp implements InkRuntime {
     const cut = rows < old.rows && this.log.height >= rows;
     if (this.drawsInPlace && (columns < old.columns || cut)) this.log.invalidate(columns);
     this.size.set({ columns, rows });
+    // The app reads the size too. A frame ahead of it would land in the scrollback when it overflows.
+    this.runChangeDetection();
+    this.commitQueued = false;
     this.drawFrame();
   }
 
@@ -569,7 +572,7 @@ export class InkApp implements InkRuntime {
   }
 
   private restoreBytes(): string {
-    if (this.usesCursor) return SHOW_CURSOR + BRACKETED_PASTE_OFF;
+    if (this.usesCursor) return BRACKETED_PASTE_OFF + SHOW_CURSOR;
     const pasteOff = this.bracketedPasteOn ? BRACKETED_PASTE_OFF : '';
     if (this.drawsInPlace || this.options.frameSink !== undefined) return pasteOff;
     const text = this.lastGrid === null ? '' : frameText(this.lastGrid, this.level);

@@ -1,0 +1,4 @@
+✔ Build image
+✔ Run migrations
+✔ Switch traffic
+Deployed to prod

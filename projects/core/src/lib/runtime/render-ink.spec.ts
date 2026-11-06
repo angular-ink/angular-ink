@@ -242,7 +242,7 @@ describe('renderInk', () => {
       const instance = await render(Rows, { stdout, inputs: { count: 2 } });
       instance.unmount();
       await instance.waitUntilExit();
-      expect(stdout.output.endsWith(SHOW_CURSOR + PASTE_OFF)).toBe(true);
+      expect(stdout.output.endsWith(PASTE_OFF + SHOW_CURSOR)).toBe(true);
       expect(stdout.viewport()).toEqual(['row 0', 'row 1']);
       expect(stdout.cursor()).toEqual({ x: 0, y: 2 });
     });
@@ -413,6 +413,16 @@ describe('renderInk', () => {
       await instance.waitUntilRenderFlush();
       expect(stdout.viewport()).toEqual(['above', 'tools', '8x12']);
       expect(Tools.last.size()).toEqual({ columns: 8, rows: 12 });
+    });
+
+    it('draws no frame of the new size with what the app made of the old one', async () => {
+      const stdout = new FakeTerminal(30, 12);
+      const instance = await render(Tools, { stdout });
+      const before = stdout.output.length;
+      stdout.resize(20, 12);
+      await instance.waitUntilRenderFlush();
+      expect(stdout.output.slice(before)).not.toContain('30x12');
+      expect(stdout.viewport()).toEqual(['tools 20x12']);
     });
 
     it('clears a frame of full-width rows, which reflow to the most rows', async () => {

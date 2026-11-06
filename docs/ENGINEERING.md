@@ -17,7 +17,7 @@ Tests are written first and must fail without the change they cover (see `AGENTS
 | End to end  | The built CLI in a pseudo-terminal, compared with expected screens              | `scripts/e2e.mjs`                          | `e2e/`                 |
 | Parity      | The same app on Ink and on angular-ink gives the same frames                    | `parity/run.mjs`                           | `parity/`              |
 
-The last two levels arrive with the tasks that build them.
+The parity level arrives with the task that builds it.
 
 ### Test isolation
 

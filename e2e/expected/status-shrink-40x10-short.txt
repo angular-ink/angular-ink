@@ -1,0 +1,7 @@
+╭──────────────────────────────────────╮
+│ Service         │ State    │ Latency │
+│ service-0       │ ok       │    0 ms │
+│ service-1       │ ok       │    1 ms │
+│ service-2       │ ok       │    2 ms │
+╰──────────────────────────────────────╯
+40x10 · q to quit
