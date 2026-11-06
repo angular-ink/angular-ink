@@ -1,4 +1,4 @@
-import { Component, ElementRef, inject, input } from '@angular/core';
+import { Component, ElementRef, inject, input, type InputSignalWithTransform } from '@angular/core';
 import type { BoxStyle, Boxes } from 'cli-boxes';
 import type { InkNode } from '../tree/node';
 import {
@@ -8,6 +8,13 @@ import {
   sizeAttribute,
   type InkSize,
 } from './attributes';
+
+/** The inputs of `ink-box` as one object, like the `Styles` of Ink. */
+export type InkBoxStyle = {
+  readonly [
+    Name in Exclude<keyof InkBox, 'inkProps'>
+  ]?: InkBox[Name] extends InputSignalWithTransform<infer Value, unknown> ? Value : never;
+};
 
 /** A named style from cli-boxes, or the eight characters of a custom one. */
 type BorderStyle = keyof Boxes | BoxStyle;

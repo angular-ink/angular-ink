@@ -3,6 +3,7 @@ import { borderWidths, paintBorder, type Sides } from './borders';
 import { parseColor } from './color';
 import { createGrid, writeSpan, writeSpans, type CellGrid, type Clip } from './grid';
 import type { LayoutBox } from './layout';
+import { holdsText } from '../tree/node';
 
 type Props = Readonly<Record<string, unknown>>;
 
@@ -11,6 +12,16 @@ export function paintTree(root: LayoutBox): CellGrid {
   const grid = createGrid(root.width, root.height);
   const everywhere: Clip = { x0: 0, y0: 0, x1: root.width, y1: root.height };
   paintBox(grid, root, 0, 0, everywhere);
+  return grid;
+}
+
+/** Paints the output of the root's `ink-static` into a grid of its own, or `null` if it has none. */
+export function paintStatic(root: LayoutBox): CellGrid | null {
+  const layer = root.staticLayer;
+  if (layer === undefined || layer.rows <= 0 || layer.columns <= 0) return null;
+  const grid = createGrid(layer.columns, layer.rows);
+  const everywhere: Clip = { x0: 0, y0: 0, x1: layer.columns, y1: layer.rows };
+  paintBox(grid, layer.box, 0, 0, everywhere);
   return grid;
 }
 
@@ -27,12 +38,12 @@ function paintBox(
   if (props['display'] === 'none') return;
   const x = offsetX + box.x;
   const y = offsetY + box.y;
-  if (box.node.tag === 'ink-text') {
-    paintText(grid, box, x, y, clip);
+  if (holdsText(box.node.tag)) {
+    paintText(grid, box, props, x, y, clip);
     return;
   }
   let childClip = clip;
-  if (box.node.tag === 'ink-box') {
+  if (box.node.tag === 'ink-box' || box.node.tag === 'ink-static') {
     const borders = borderWidths(props);
     paintBackground(grid, box, props, x, y, borders, clip);
     paintBorder(grid, box, props, x, y, clip);
@@ -42,9 +53,18 @@ function paintBox(
   for (const child of box.children) paintBox(grid, child, x, y, childClip);
 }
 
-function paintText(grid: CellGrid, box: LayoutBox, x: number, y: number, clip: Clip): void {
+function paintText(
+  grid: CellGrid,
+  box: LayoutBox,
+  props: Props,
+  x: number,
+  y: number,
+  clip: Clip,
+): void {
+  const transform = props['transform'] as ((line: string, index: number) => string) | undefined;
   box.lines?.forEach((line, index) => {
-    writeSpans(grid, x, y + index, parseAnsi(line, PLAIN_STYLE), clip);
+    const text = transform === undefined ? line : transform(line, index);
+    writeSpans(grid, x, y + index, parseAnsi(text, PLAIN_STYLE), clip);
   });
 }
 

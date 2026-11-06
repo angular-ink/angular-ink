@@ -1,7 +1,7 @@
 import cliTruncate from 'cli-truncate';
 import stringWidth from 'string-width';
 import wrapAnsi from 'wrap-ansi';
-import { openSgr, parseAnsi, PLAIN_STYLE, type CellStyle } from './ansi';
+import { openSgr, parseAnsi, PLAIN_STYLE, sanitizeAnsi, type CellStyle } from './ansi';
 import { parseColor } from './color';
 import type { InkNode } from '../tree/node';
 
@@ -33,7 +33,19 @@ function squashElement(node: InkNode, style: CellStyle): string {
   // ink-newline has no child text node; its owner knows the line breaks it stands for.
   const owned = node.tag === 'ink-newline' ? (node.owner as { text?: unknown } | null)?.text : null;
   if (typeof owned === 'function') return String(owned.call(node.owner));
-  return squashChildren(node, node.tag === 'ink-text' ? styleOf(node, style) : style);
+  const text = squashChildren(node, node.tag === 'ink-text' ? styleOf(node, style) : style);
+  return applyNestedTransform(node, text);
+}
+
+/** A transform inside another text has no lines of its own in the frame, so it runs here. */
+function applyNestedTransform(node: InkNode, text: string): string {
+  const transform = node.owner?.inkProps()['transform'];
+  if (typeof transform !== 'function' || text === '') return text;
+  const rewrite = transform as (line: string, index: number) => string;
+  return text
+    .split('\n')
+    .map((line, index) => sanitizeAnsi(rewrite(line, index)))
+    .join('\n');
 }
 
 /** A style flag set on a nested text adds to the outer one; it never switches it off. */

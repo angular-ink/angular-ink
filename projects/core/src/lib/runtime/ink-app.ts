@@ -9,15 +9,15 @@ import {
 import type { Yoga } from 'yoga-layout/load';
 import { detectColorLevel, type ColorLevel } from '../engine/color-level';
 import type { CellGrid } from '../engine/grid';
-import { layoutTree } from '../engine/layout';
-import { paintTree } from '../engine/paint';
+import { findStaticNodes, layoutTree } from '../engine/layout';
+import { paintStatic, paintTree } from '../engine/paint';
 import { mountTree, type MountedTree } from '../platform/mount';
 import { patchConsole } from './console-patch';
 import { paintErrorOverview } from './error-overview';
 import { installExitHooks } from './exit-hooks';
 import { FrameScheduler } from './frame-scheduler';
 import { InkRuntime, type WindowSize } from './inject';
-import { FrameLog, frameText } from './log';
+import { FrameLog, frameText, staticText, takeStaticOutput } from './log';
 import { createStreamPort, type StreamPort } from './terminal-port';
 
 const HIDE_CURSOR = '\x1b[?25l';
@@ -35,6 +35,8 @@ export interface InkAppOptions {
   readonly yoga: Yoga;
   readonly providers: readonly (Provider | EnvironmentProviders)[];
   readonly frameSink?: (grid: CellGrid) => void;
+  /** Takes `ink-static` output instead of the terminal, in the two forms a sink may want. */
+  readonly staticSink?: (output: { readonly plain: string; readonly ansi: string }) => void;
   /** Called once, when the app has ended and its stdout is free for another. */
   readonly onExit: () => void;
 }
@@ -86,6 +88,7 @@ export class InkApp implements InkRuntime {
   private crash: Error | null = null;
   private restored = false;
   private warnedAboutReuse = false;
+  private warnedAboutStatics = false;
   private restoreConsole: (() => void) | null = null;
   private stopResizing: (() => void) | null = null;
   private removeExitHooks: (() => void) | null = null;
@@ -150,10 +153,12 @@ export class InkApp implements InkRuntime {
       this.tree?.destroy();
       this.tree = null;
       this.component = component;
+      this.warnedAboutStatics = false;
       this.tree = mountTree(component, {
         inputs,
         providers: [{ provide: InkRuntime, useValue: this }, ...this.options.providers],
         onCommit: () => {
+          this.takeStatic();
           this.queueCommit();
         },
         warn: (message) => {
@@ -304,6 +309,38 @@ export class InkApp implements InkRuntime {
     } catch (error) {
       this.fail(error);
     }
+  }
+
+  // Runs inside the commit: the tick goes on to remove these nodes, before any scheduled frame.
+  private takeStatic(): void {
+    const { tree } = this;
+    if (tree === null || this.phase === 'unmounted' || this.crash !== null || this.portClosed) {
+      return;
+    }
+    const statics = findStaticNodes(tree.root);
+    if (statics.length > 1) this.warnAboutStatics();
+    if (statics[0]?.children.every((child) => child.kind === 'comment') ?? true) return;
+    try {
+      const layout = layoutTree(tree.root, this.port.columns, this.options.yoga);
+      if (this.options.frameSink === undefined) {
+        const output = takeStaticOutput(layout, this.level);
+        if (output !== null) this.writeStdout(output);
+        return;
+      }
+      const grid = paintStatic(layout);
+      if (grid === null) return;
+      this.options.staticSink?.({ plain: staticText(grid, 0), ansi: staticText(grid, 3) });
+    } catch (error) {
+      this.fail(error);
+    }
+  }
+
+  private warnAboutStatics(): void {
+    if (this.warnedAboutStatics || !isDevMode()) return;
+    this.warnedAboutStatics = true;
+    this.writeStderr(
+      'angular-ink: a tree renders only its first <ink-static>; the others are ignored.\n',
+    );
   }
 
   // The renderer calls end() in the middle of change detection, even one that failed. Waiting for

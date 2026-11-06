@@ -32,7 +32,7 @@ class DiscardingStream extends Writable {
 
 /**
  * Renders `component` once, at the size of a virtual terminal, and returns the first stable frame
- * as plain text. Nothing reaches the real streams and no listener outlives the call. The terminal
+ * as plain text, after any `ink-static` output. Nothing reaches the real streams and no listener outlives the call. The terminal
  * functions of the app do nothing here, and an error from the render rejects after the cleanup.
  */
 export async function renderInkToString<T>(
@@ -53,7 +53,7 @@ export async function renderInkToString<T>(
     writeStderr: () => undefined,
   };
 
-  const shown: { frame: CellGrid | null } = { frame: null };
+  const shown: { frame: CellGrid | null; permanent: string } = { frame: null, permanent: '' };
   let stable = false;
   const instance = await renderInk(component, {
     stdout,
@@ -67,6 +67,9 @@ export async function renderInkToString<T>(
     ɵframeSink: (grid) => {
       if (!stable) shown.frame = grid;
     },
+    ɵstaticSink: ({ plain }) => {
+      if (!stable) shown.permanent += plain;
+    },
   });
   try {
     await instance.waitUntilRenderFlush();
@@ -76,5 +79,7 @@ export async function renderInkToString<T>(
   }
   // Rejects with the error the render ended on, after everything is released.
   await instance.waitUntilExit();
-  return shown.frame === null ? '' : gridToString(shown.frame, { ansi: false });
+  // The line end after permanent output only separates it from a frame.
+  if (shown.frame === null || shown.frame.rows === 0) return shown.permanent.replace(/\n$/, '');
+  return shown.permanent + gridToString(shown.frame, { ansi: false });
 }

@@ -47,6 +47,8 @@ export async function renderForTest<T>(
   const stderr = new FakeStderr();
   const frames: string[] = [];
   let lastGrid: ɵCellGrid | null = null;
+  // Like Ink in debug mode, which this follows: each frame holds all the permanent output so far.
+  let permanent = { plain: '', ansi: '' };
   let app: Instance | null = null;
   const settle = async (): Promise<void> => {
     await app?.waitUntilRenderFlush();
@@ -66,16 +68,20 @@ export async function renderForTest<T>(
     providers: options.providers ?? [],
     ɵframeSink: (grid) => {
       lastGrid = grid;
-      frames.push(ɵgridToString(grid, { ansi: false }));
+      frames.push(permanent.plain + ɵgridToString(grid, { ansi: false }));
+    },
+    ɵstaticSink: ({ plain, ansi }) => {
+      permanent = { plain: permanent.plain + plain, ansi: permanent.ansi + ansi };
     },
   });
   const started = app;
 
   const instance: InkTestInstance = {
-    lastFrame: (frameOptions) =>
-      lastGrid === null
-        ? undefined
-        : ɵgridToString(lastGrid, { ansi: frameOptions?.ansi ?? false }),
+    lastFrame: (frameOptions) => {
+      if (lastGrid === null) return undefined;
+      const ansi = frameOptions?.ansi ?? false;
+      return (ansi ? permanent.ansi : permanent.plain) + ɵgridToString(lastGrid, { ansi });
+    },
     frames,
     stdout,
     stderr,

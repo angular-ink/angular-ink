@@ -76,9 +76,30 @@ describe('layoutTree root', () => {
   });
 
   it('leaves ink-static out of the live layout', () => {
-    const layout = root(10, element('ink-static', {}, leaf(5, 5)), leaf(2, 1));
+    const layout = root(
+      10,
+      element('ink-static', { position: 'absolute' }, leaf(5, 5)),
+      leaf(2, 1),
+    );
     expect(layout.children.map(rectOf)).toEqual([[0, 0, 2, 1]]);
     expect(rectOf(layout)).toEqual([0, 0, 10, 1]);
+  });
+
+  it('gives the root the layer of the first ink-static, wrapped in its parent', () => {
+    const permanent = element('ink-static', { position: 'absolute', marginBottom: 1 }, leaf(5, 2));
+    const layout = root(10, box({ width: 8 }, permanent), element('ink-static', {}, leaf(1, 1)));
+    expect(layout.staticLayer?.columns).toBe(5);
+    expect(layout.staticLayer?.rows).toBe(3);
+    expect(layout.children[0]?.children).toEqual([]);
+    expect(layout.children[0]?.staticLayer).toBeUndefined();
+  });
+
+  it('has no layer for an ink-static that is hidden, or for the one after it', () => {
+    const hidden = element('ink-static', { position: 'absolute' }, leaf(5, 5));
+    const later = element('ink-static', { position: 'absolute' }, leaf(5, 5));
+    expect(root(10, box({ display: 'none' }, hidden), later).staticLayer).toBeUndefined();
+    const self = element('ink-static', { display: 'none' }, leaf(5, 5));
+    expect(root(10, self).staticLayer).toBeUndefined();
   });
 });
 

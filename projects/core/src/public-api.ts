@@ -9,12 +9,13 @@ export {
   InkText,
   InkTransform,
 } from './lib/elements';
-export type { InkSize, InkStaticContext } from './lib/elements';
+export type { InkBoxStyle, InkSize, InkStaticContext } from './lib/elements';
 export {
   renderInk,
   type Instance,
   type RenderOptions,
   type ɵFrameSink,
+  type ɵStaticSink,
 } from './lib/runtime/render-ink';
 export { renderInkToString, type RenderToStringOptions } from './lib/runtime/render-to-string';
 export {

@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { PLAIN_STYLE } from '../engine/ansi';
 import { namedColor } from '../engine/color';
 import { createGrid, internStyle, writeSpan, type CellGrid, type Clip } from '../engine/grid';
-import { FrameLog, frameText } from './log';
+import type { LayoutBox } from '../engine/layout';
+import { createNode } from '../tree/node';
+import { FrameLog, frameText, takeStaticOutput } from './log';
 
 const { Terminal } = xterm;
 
@@ -192,5 +194,38 @@ describe('frameText', () => {
     expect(frameText(out, 3)).toContain('38;2;255;0;0');
     expect(frameText(out, 2)).toContain('38;5;196');
     expect(frameText(out, 1)).not.toContain('38;');
+  });
+});
+
+describe('takeStaticOutput', () => {
+  const box = (tag: string, fields: Partial<LayoutBox>): LayoutBox => ({
+    node: createNode('element', tag),
+    x: 0,
+    y: 0,
+    width: 3,
+    height: 1,
+    lines: null,
+    children: [],
+    ...fields,
+  });
+  const line = box('ink-text', { lines: ['\x1b[31ma\x1b[0m'] });
+  const withLayer = (rows: number, columns = 3): LayoutBox =>
+    box('ink-root', {
+      staticLayer: { box: box('ink-static', { children: [line] }), columns, rows },
+    });
+
+  it('has nothing to give without a layer, or with an empty one', () => {
+    expect(takeStaticOutput(box('ink-root', {}))).toBeNull();
+    expect(takeStaticOutput(withLayer(0))).toBeNull();
+    expect(takeStaticOutput(withLayer(1, 0))).toBeNull();
+  });
+
+  it('keeps full color by default and follows the level it is given', () => {
+    expect(takeStaticOutput(withLayer(1))).toBe('\x1b[31ma\x1b[0m\n');
+    expect(takeStaticOutput(withLayer(1), 0)).toBe('a\n');
+  });
+
+  it('keeps every row of the grid, blank ones too', () => {
+    expect(takeStaticOutput(withLayer(3), 0)).toBe('a\n\n\n');
   });
 });

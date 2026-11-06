@@ -11,6 +11,9 @@ export interface InkNode {
   children: InkNode[];
 }
 
+/** The elements whose children are squashed into one run of text. */
+export const holdsText = (tag: string): boolean => tag === 'ink-text' || tag === 'ink-transform';
+
 /**
  * Once an app has hydrated from server-rendered HTML, Angular reads the `ngh` attribute of every
  * component host it creates, ours included, to find server-rendered DOM to reuse. An ink node has

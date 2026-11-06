@@ -1,6 +1,8 @@
 import type { ColorLevel } from '../engine/color-level';
 import { diffGrids } from '../engine/diff';
 import { gridToString, type CellGrid } from '../engine/grid';
+import type { LayoutBox } from '../engine/layout';
+import { paintStatic } from '../engine/paint';
 import {
   degrade,
   eraseFrame,
@@ -136,6 +138,22 @@ function reflowedRowHeight(grid: CellGrid, y: number, columns: number): number {
     x += width;
   }
   return rows;
+}
+
+/**
+ * The new permanent output in `root`, ready to write above the frame, or `null` if there is none.
+ * `level` is the color level of the stream it goes to.
+ */
+export function takeStaticOutput(root: LayoutBox, level: ColorLevel = 3): string | null {
+  const grid = paintStatic(root);
+  return grid === null ? null : staticText(grid, level);
+}
+
+/** Every row of the grid counts, blank ones too, and the frame then starts on a line of its own. */
+export function staticText(grid: CellGrid, level: ColorLevel): string {
+  const text = frameText(grid, level);
+  const rows = text === '' ? 0 : text.split('\n').length;
+  return text + '\n'.repeat(grid.rows - rows + 1);
 }
 
 /** The frame as plain lines with SGR only, for a stream that takes no cursor moves. */

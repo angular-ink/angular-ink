@@ -4,7 +4,7 @@ import { parseColor } from './color';
 import { layoutLines, measureText, squashText, type TextWrap } from './text-layout';
 import { applyBoxStyle } from './yoga-map';
 import { flattenHosts } from '../tree/flatten';
-import type { InkNode } from '../tree/node';
+import { holdsText, type InkNode } from '../tree/node';
 
 /** A laid-out node. `x` and `y` are in cells, relative to the parent box. */
 export interface LayoutBox {
@@ -16,6 +16,15 @@ export interface LayoutBox {
   /** The wrapped lines of an `ink-text`, with SGR; `null` for any other node. */
   readonly lines: readonly string[] | null;
   readonly children: readonly LayoutBox[];
+  /** On the root only: the `ink-static` that has output to give. */
+  readonly staticLayer?: StaticLayer;
+}
+
+/** An `ink-static`, kept out of `children`, and the size of the grid it is painted on. */
+export interface StaticLayer {
+  readonly box: LayoutBox;
+  readonly columns: number;
+  readonly rows: number;
 }
 
 interface Pending {
@@ -38,11 +47,26 @@ export function layoutTree(root: InkNode, columns: number, yoga: Yoga): LayoutBo
     const pending = build(yoga, flat, rootYoga, PLAIN_STYLE, measured);
     rootYoga.setWidth(columns);
     rootYoga.calculateLayout(undefined, undefined, yoga.DIRECTION_LTR);
-    return read(pending);
+    const box = read(pending);
+    const staticLayer = readStaticLayer(yoga, pending);
+    return staticLayer === null ? box : { ...box, staticLayer };
   } finally {
     for (const node of measured) node.unsetMeasureFunc();
     rootYoga.freeRecursive();
   }
+}
+
+/** Every `ink-static` of the tree in document order, even the ones under `display: none`. */
+export function findStaticNodes(root: InkNode): readonly InkNode[] {
+  const found: InkNode[] = [];
+  const visit = (node: InkNode): void => {
+    for (const child of node.children) {
+      if (child.tag === 'ink-static') found.push(child);
+      else visit(child);
+    }
+  };
+  visit(root);
+  return found;
 }
 
 /** Fills `yogaNode` for `node` and creates the Yoga nodes of its children. */
@@ -54,7 +78,7 @@ function build(
   measured: YogaNode[],
 ): Pending {
   const props = node.owner?.inkProps() ?? {};
-  if (node.tag === 'ink-text') {
+  if (holdsText(node.tag)) {
     return buildText(yoga, node, yogaNode, props, inherited, measured);
   }
   if (node.tag !== 'ink-root') {
@@ -70,8 +94,6 @@ function build(
   const children: Pending[] = [];
   if (!hidden) {
     for (const child of node.children) {
-      // ink-static is laid out apart from the live tree.
-      if (child.tag === 'ink-static') continue;
       const childYoga = yoga.Node.create();
       yogaNode.insertChild(childYoga, yogaNode.getChildCount());
       children.push(build(yoga, child, childYoga, style, measured));
@@ -116,6 +138,31 @@ function read(pending: Pending): LayoutBox {
         : text.squashed === ''
           ? []
           : layoutLines(text.squashed, width, text.wrap),
-    children: pending.children.map(read),
+    // ink-static takes part in the layout, as an absolute child, but its output is painted apart.
+    children: pending.children.filter((child) => child.node.tag !== 'ink-static').map(read),
   };
+}
+
+/** Only the first `ink-static` of the tree counts, and only if nothing hides it. */
+function readStaticLayer(yoga: Yoga, root: Pending): StaticLayer | null {
+  const [first] = findStaticNodes(root.node);
+  if (first === undefined || first.owner?.inkProps()['display'] === 'none') return null;
+  const pending = findPending(root, first);
+  if (pending === null) return null;
+  const box = read(pending);
+  return {
+    box,
+    columns: box.x + box.width + pending.yoga.getComputedMargin(yoga.EDGE_RIGHT),
+    rows: box.y + box.height + pending.yoga.getComputedMargin(yoga.EDGE_BOTTOM),
+  };
+}
+
+/** A hidden box builds no children, so a node under one has no entry. */
+function findPending(pending: Pending, node: InkNode): Pending | null {
+  if (pending.node === node) return pending;
+  for (const child of pending.children) {
+    const found = findPending(child, node);
+    if (found !== null) return found;
+  }
+  return null;
 }

@@ -7,6 +7,7 @@ import { InkTransform } from './transform';
 
 export { InkBox, InkNewline, InkSpacer, InkStatic, InkText, InkTransform };
 export type { InkSize } from './attributes';
+export type { InkBoxStyle } from './box';
 export type { InkStaticContext } from './static';
 
 /** Import this in a component's `imports` to use every `ink-*` element. */

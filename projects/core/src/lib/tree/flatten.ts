@@ -1,4 +1,4 @@
-import { createNode, type InkNode } from './node';
+import { createNode, holdsText, type InkNode } from './node';
 
 export const MAX_TEXT_BYTES = 1_048_576;
 export const MAX_DEPTH = 256;
@@ -36,7 +36,7 @@ function collect(source: InkNode, target: InkNode, inkParent: string, depth: num
       if (exceedsTextLimit(child.text)) {
         throw new Error(`angular-ink: text longer than ${String(MAX_TEXT_BYTES)} bytes`);
       }
-      if (inkParent !== 'ink-text') {
+      if (!holdsText(inkParent)) {
         throw new Error(`angular-ink: text "${child.text}" must be inside <ink-text>`);
       }
       const copy = createNode('text', '', child.text);
@@ -46,8 +46,8 @@ function collect(source: InkNode, target: InkNode, inkParent: string, depth: num
       // Host: its children stand in its place, one level deeper in the source.
       collect(child, target, inkParent, depth + 1);
     } else {
-      if (child.tag === 'ink-box' && inkParent === 'ink-text') {
-        throw new Error("angular-ink: <ink-box> can't be inside <ink-text>");
+      if (child.tag === 'ink-box' && holdsText(inkParent)) {
+        throw new Error(`angular-ink: <ink-box> can't be inside <${inkParent}>`);
       }
       const copy = createNode('element', child.tag);
       copy.owner = child.owner;

@@ -14,6 +14,7 @@ import {
   type OnInit,
 } from '@angular/core';
 import type { InkNode } from '../tree/node';
+import type { InkBoxStyle } from './box';
 
 /** What the `ng-template` of an `ink-static` receives for each item. */
 export interface InkStaticContext<T> {
@@ -48,6 +49,7 @@ export class InkStaticOutlet<T> implements OnInit {
 })
 export class InkStatic<T> {
   readonly items = input.required<readonly T[]>();
+  readonly style = input<InkBoxStyle | undefined>();
   private readonly template = contentChild.required(TemplateRef<InkStaticContext<T>>);
   private readonly shown = signal(0);
   protected readonly fresh = computed<InkStaticContext<T>[]>(() => {
@@ -69,6 +71,12 @@ export class InkStatic<T> {
   }
 
   inkProps(): Record<string, unknown> {
-    return {};
+    const style = this.style();
+    return {
+      position: 'absolute',
+      flexDirection: 'column',
+      ...style,
+      display: this.fresh().length > 0 ? style?.display : 'none',
+    };
   }
 }

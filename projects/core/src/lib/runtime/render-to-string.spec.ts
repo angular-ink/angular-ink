@@ -1,6 +1,6 @@
 import { Component, input, signal } from '@angular/core';
 import { describe, expect, it, vi } from 'vitest';
-import { InkBox, InkText } from '../elements';
+import { InkBox, InkStatic, InkText } from '../elements';
 import { injectApp, injectStderr, injectStdout, injectWindowSize } from './inject';
 import { renderInkToString } from './render-to-string';
 
@@ -62,6 +62,24 @@ class Broken {
   }
 }
 
+@Component({
+  selector: 'ink-test-permanent',
+  imports: [InkStatic, InkText],
+  template: `
+    <ink-static [items]="['a', 'b']">
+      <ng-template let-item>
+        <ink-text color="green">{{ item }}</ink-text>
+      </ng-template>
+    </ink-static>
+    @if (live()) {
+      <ink-text>live</ink-text>
+    }
+  `,
+})
+class Permanent {
+  readonly live = input(true);
+}
+
 describe('renderInkToString', () => {
   it('returns the frame without color escapes', async () => {
     expect(await renderInkToString(Greeting, { inputs: { name: 'ana' } })).toBe('hello ana');
@@ -104,7 +122,13 @@ describe('renderInkToString', () => {
     expect(await renderInkToString(Settling)).toBe('later');
   });
 
-  it.todo('puts ink-static output before the live frame (INK-R2S-05, lands with Task 11)');
+  it('puts ink-static output before the live frame (INK-R2S-05)', async () => {
+    expect(await renderInkToString(Permanent)).toBe('a\nb\nlive');
+  });
+
+  it('leaves no line end after ink-static output with no live frame (INK-R2S-05)', async () => {
+    expect(await renderInkToString(Permanent, { inputs: { live: false } })).toBe('a\nb');
+  });
 
   it('rejects with the error after cleaning up (INK-R2S-06)', async () => {
     const before = process.listenerCount('exit');

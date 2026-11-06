@@ -5,6 +5,7 @@ import type { CellGrid } from '../engine/grid';
 import { InkApp } from './ink-app';
 
 export type ɵFrameSink = (grid: CellGrid) => void;
+export type ɵStaticSink = (output: { readonly plain: string; readonly ansi: string }) => void;
 
 export interface RenderOptions {
   stdout?: NodeJS.WritableStream;
@@ -23,6 +24,8 @@ export interface RenderOptions {
   providers?: readonly (Provider | EnvironmentProviders)[];
   /** Takes each frame instead of the terminal. Private to `@angular-ink/testing`. */
   ɵframeSink?: ɵFrameSink;
+  /** Takes `ink-static` output while `ɵframeSink` takes the frames. */
+  ɵstaticSink?: ɵStaticSink;
 }
 
 export interface Instance {
@@ -83,6 +86,7 @@ export async function renderInk<T>(
       yoga,
       providers: settings.providers ?? [],
       ...(settings.ɵframeSink === undefined ? {} : { frameSink: settings.ɵframeSink }),
+      ...(settings.ɵstaticSink === undefined ? {} : { staticSink: settings.ɵstaticSink }),
       onExit: () => {
         instances.delete(stdout);
       },
