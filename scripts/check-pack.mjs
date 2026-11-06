@@ -10,7 +10,12 @@ const COMMON = ['LICENSE', 'README.md'];
 
 /** The files each package must ship, by the name of its folder in dist/. */
 export const PACKAGES = {
-  core: [...COMMON, 'fesm2022/angular-ink-core.mjs', 'types/angular-ink-core.d.ts'],
+  core: [
+    ...COMMON,
+    'THIRD-PARTY-NOTICES',
+    'fesm2022/angular-ink-core.mjs',
+    'types/angular-ink-core.d.ts',
+  ],
   testing: [...COMMON, 'fesm2022/angular-ink-testing.mjs', 'types/angular-ink-testing.d.ts'],
   cli: [...COMMON, 'cli.js', 'build.js'],
 };

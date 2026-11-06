@@ -10,6 +10,7 @@ const core = [
   'types/angular-ink-core.d.ts',
 ];
 const testing = core.map((path) => path.replace('-core', '-testing'));
+core.push('THIRD-PARTY-NOTICES');
 const cli = [
   'LICENSE',
   'README.md',
@@ -36,6 +37,7 @@ describe('checkPackFiles', () => {
     expect(checkPackFiles('core', ['package.json'])).toEqual([
       'LICENSE is missing',
       'README.md is missing',
+      'THIRD-PARTY-NOTICES is missing',
       'fesm2022/angular-ink-core.mjs is missing',
       'types/angular-ink-core.d.ts is missing',
     ]);

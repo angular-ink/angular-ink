@@ -46,6 +46,8 @@ const LEGACY_META_BITS = 2 | 8;
 /** Alt and Meta on the forms Ink reads with its kitty parser, whether or not the protocol is on. */
 const MODERN_META_BITS = 2 | 32;
 
+// Parity needs the names Ink gives these codes. Its MIT notice and Enquirer's, where Ink's table
+// comes from, ship in THIRD-PARTY-NOTICES.
 const KEY_NAMES: ReadonlyMap<string, string> = new Map([
   ['OP', 'f1'],
   ['OQ', 'f2'],
