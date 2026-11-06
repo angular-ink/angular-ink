@@ -45,6 +45,17 @@ const DEFAULT_COMPILER_OPTIONS: CompilerOptions = {
   strictTemplates: true,
 };
 
+/**
+ * ESM has no `require`, and a bundled CJS dependency calls it. It goes on `globalThis` because
+ * esbuild does not read the banner: a top-level `const require` would clash with a bundled module
+ * that declares its own, which esbuild leaves unrenamed unless something uses the global.
+ */
+const BANNER = [
+  '#!/usr/bin/env node',
+  'import { createRequire as __angularInkCreateRequire } from "node:module";',
+  'globalThis.require ??= __angularInkCreateRequire(import.meta.url);',
+].join('\n');
+
 // The entry replaces the root files of the tsconfig, so a config that lists none is fine.
 const IGNORED_CONFIG_ERRORS = new Set([18002, 18003]);
 
@@ -188,7 +199,7 @@ export async function buildCli(options: BuildCliOptions): Promise<BuildCliResult
       metafile: true,
       logLevel: 'silent',
       define: { ngDevMode: 'false', ngJitMode: 'false', ngI18nClosureMode: 'false' },
-      banner: { js: '#!/usr/bin/env node' },
+      banner: { js: BANNER },
       plugins: [
         linkerPlugin({
           sourcemap,

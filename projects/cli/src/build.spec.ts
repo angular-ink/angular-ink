@@ -139,6 +139,64 @@ describe('buildCli', () => {
     BUILD_TIMEOUT,
   );
 
+  describe('dependencies that use require', () => {
+    const CJS_DEP = {
+      'node_modules/cjs-dep/package.json': '{"name":"cjs-dep","main":"index.js"}',
+      'node_modules/cjs-dep/index.js': `const { sep } = require('node:path');
+module.exports = { sep };`,
+      'node_modules/cjs-dep/index.d.ts': 'declare const dep: { sep: string };\nexport default dep;',
+    };
+    // Declares both names the banner needs, at the top level of a bundled module.
+    const ESM_DEP = {
+      'node_modules/esm-dep/package.json':
+        '{"name":"esm-dep","type":"module","exports":{"types":"./index.d.ts","default":"./index.js"}}',
+      'node_modules/esm-dep/index.js': `import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+export const sep = require('node:path').sep;`,
+      'node_modules/esm-dep/index.d.ts': 'export declare const sep: string;',
+    };
+
+    it.each([
+      ['a CJS dependency', true, { ...CJS_DEP }, `import dep from 'cjs-dep';`, 'dep.sep'],
+      ['a CJS dependency', false, { ...CJS_DEP }, `import dep from 'cjs-dep';`, 'dep.sep'],
+      [
+        'a module with its own require',
+        true,
+        { ...ESM_DEP },
+        `import { sep } from 'esm-dep';`,
+        'sep',
+      ],
+      [
+        'a module with its own require',
+        false,
+        { ...ESM_DEP },
+        `import { sep } from 'esm-dep';`,
+        'sep',
+      ],
+      [
+        'both together',
+        true,
+        { ...CJS_DEP, ...ESM_DEP },
+        `import dep from 'cjs-dep';\nimport { sep } from 'esm-dep';`,
+        'dep.sep + sep',
+      ],
+    ])(
+      'runs %s (minify: %s)',
+      async (_name, minify, files, imports, value) => {
+        const cwd = await makeCase({
+          ...files,
+          'main.ts': `${imports}
+declare const process: { stdout: { write(text: string): void } };
+process.stdout.write(${value});`,
+        });
+        await buildCli({ entry: 'main.ts', out: 'out.mjs', cwd, minify });
+        const { stdout } = await exec('node', ['out.mjs'], { cwd, timeout: 30_000 });
+        expect(stdout).toMatch(/^\/+$/);
+      },
+      BUILD_TIMEOUT,
+    );
+  });
+
   it('rejects when the entry does not exist', async () => {
     const cwd = await makeCase({});
     await expect(buildCli({ entry: 'src/nope.ts', out: 'cli.mjs', cwd })).rejects.toThrow(
