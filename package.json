@@ -1,0 +1,65 @@
+{
+  "name": "angular-ink-workspace",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "ng": "ng",
+    "build:core": "ng build core",
+    "build:testing": "ng build testing",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "typecheck": "tsc -p projects/core/tsconfig.lib.json --noEmit && tsc -p projects/core/tsconfig.spec.json --noEmit && tsc -p projects/testing/tsconfig.lib.json --noEmit && tsc -p projects/testing/tsconfig.spec.json --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "prepare": "husky || true"
+  },
+  "packageManager": "npm@11.19.1",
+  "dependencies": {
+    "@angular/compiler": "^22.2.0",
+    "@angular/core": "^22.2.0",
+    "rxjs": "~7.8.0",
+    "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "@analogjs/vite-plugin-angular": "^2.9.2",
+    "@angular/build": "^22.2.4",
+    "@angular/cli": "^22.2.4",
+    "@angular/compiler-cli": "^22.2.0",
+    "@commitlint/cli": "^21.2.4",
+    "@commitlint/config-conventional": "^21.2.4",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.12.0",
+    "@vitest/coverage-v8": "^5.0.5",
+    "angular-eslint": "^22.6.0",
+    "eslint": "^10.13.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-regexp": "^3.3.1",
+    "fast-check": "^4.10.2",
+    "globals": "^17.13.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0",
+    "ng-packagr": "^22.2.5",
+    "prettier": "^3.8.1",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.0.0"
+  },
+  "workspaces": [
+    "projects/core",
+    "projects/testing"
+  ],
+  "lint-staged": {
+    "*.{ts,mjs,js}": [
+      "prettier --write",
+      "eslint --fix"
+    ],
+    "*.{html,css,json,md,yml}": [
+      "prettier --write"
+    ]
+  },
+  "overrides": {
+    "vite": "^8.3.5"
+  }
+}

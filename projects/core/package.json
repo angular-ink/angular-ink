@@ -1,0 +1,42 @@
+{
+  "name": "@angular-ink/core",
+  "version": "0.0.0",
+  "description": "angular-ink — terminal apps from Angular components, with an Ink-inspired API",
+  "keywords": [
+    "angular",
+    "terminal",
+    "cli",
+    "tui",
+    "ink",
+    "yoga",
+    "renderer",
+    "components"
+  ],
+  "author": "Gabriel Silva (https://github.com/GabeSilvaDev)",
+  "homepage": "https://github.com/angular-ink/angular-ink",
+  "bugs": {
+    "url": "https://github.com/angular-ink/angular-ink/issues"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/angular-ink/angular-ink.git",
+    "directory": "projects/core"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "peerDependencies": {
+    "@angular/core": "^22.0.0"
+  },
+  "dependencies": {
+    "cli-boxes": "^4.0.1",
+    "cli-truncate": "^6.0.0",
+    "string-width": "^8.3.0",
+    "tslib": "^2.3.0",
+    "wrap-ansi": "^10.0.2",
+    "yoga-layout": "~3.2.1"
+  },
+  "sideEffects": false
+}

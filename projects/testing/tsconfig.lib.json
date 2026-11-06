@@ -1,0 +1,18 @@
+/* To learn more about Typescript configuration file: https://www.typescriptlang.org/docs/handbook/tsconfig-json.html. */
+/* To learn more about Angular compiler options: https://angular.dev/reference/configs/angular-compiler-options. */
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "../../out-tsc/testing-lib",
+    "rootDir": ".",
+    "declaration": true,
+    "declarationMap": true,
+    // The built core first, as users get it from npm; its sources when dist/core is not built yet.
+    "paths": {
+      "@angular-ink/core": ["../../dist/core", "../core/src/public-api.ts"]
+    },
+    "types": []
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["**/*.spec.ts"]
+}

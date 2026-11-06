@@ -1,0 +1,15 @@
+{
+  "$schema": "../../node_modules/ng-packagr/ng-package.schema.json",
+  "dest": "../../dist/core",
+  "allowedNonPeerDependencies": [
+    "cli-boxes",
+    "cli-truncate",
+    "string-width",
+    "tslib",
+    "wrap-ansi",
+    "yoga-layout"
+  ],
+  "lib": {
+    "entryFile": "src/public-api.ts"
+  }
+}

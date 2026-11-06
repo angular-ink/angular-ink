@@ -1,0 +1,36 @@
+{
+  "name": "@angular-ink/testing",
+  "version": "0.0.0",
+  "description": "Test helpers for angular-ink: a virtual terminal and simulated key presses",
+  "keywords": [
+    "angular",
+    "terminal",
+    "cli",
+    "tui",
+    "ink",
+    "testing"
+  ],
+  "author": "Gabriel Silva (https://github.com/GabeSilvaDev)",
+  "homepage": "https://github.com/angular-ink/angular-ink",
+  "bugs": {
+    "url": "https://github.com/angular-ink/angular-ink/issues"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/angular-ink/angular-ink.git",
+    "directory": "projects/testing"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "peerDependencies": {
+    "@angular-ink/core": "0.0.0",
+    "@angular/core": "^22.0.0"
+  },
+  "dependencies": {
+    "tslib": "^2.3.0"
+  },
+  "sideEffects": false
+}
