@@ -65,8 +65,10 @@ class InkRenderer implements Renderer2 {
     return node.parent.children[node.parent.children.indexOf(node) + 1] ?? null;
   }
 
-  setAttribute(): void {
-    // Props come from the owner component's inputs.
+  // Angular writes a static class or style through this one, and any other attribute is a no-op.
+  setAttribute(_node: InkNode, name: string): void {
+    if (name === 'class') this.warnAboutClasses();
+    else if (name === 'style') this.warnAboutStyles();
   }
 
   removeAttribute(): void {
@@ -74,7 +76,7 @@ class InkRenderer implements Renderer2 {
   }
 
   addClass(): void {
-    this.warnOnce('addClass', 'classes have no effect in a terminal; use the ink-* inputs');
+    this.warnAboutClasses();
   }
 
   removeClass(): void {
@@ -82,7 +84,7 @@ class InkRenderer implements Renderer2 {
   }
 
   setStyle(): void {
-    this.warnOnce('setStyle', 'styles have no effect in a terminal; use the ink-* inputs');
+    this.warnAboutStyles();
   }
 
   removeStyle(): void {
@@ -103,10 +105,18 @@ class InkRenderer implements Renderer2 {
     return () => undefined;
   }
 
-  private warnOnce(key: string, message: string): void {
+  warnOnce(key: string, message: string): void {
     if (!isDevMode() || this.warned.has(key)) return;
     this.warned.add(key);
     this.warn(`angular-ink: ${message}`);
+  }
+
+  private warnAboutClasses(): void {
+    this.warnOnce('class', 'classes have no effect in a terminal; use the ink-* inputs');
+  }
+
+  private warnAboutStyles(): void {
+    this.warnOnce('style', 'styles have no effect in a terminal; use the ink-* inputs');
   }
 }
 
@@ -121,7 +131,15 @@ export class InkRendererFactory implements RendererFactory2 {
   }
 
   // One renderer serves every component, since neither host nor type changes how nodes are built.
-  readonly createRenderer: RendererFactory2['createRenderer'] = () => this.renderer;
+  readonly createRenderer: RendererFactory2['createRenderer'] = (_host, type) => {
+    if ((type?.styles.length ?? 0) > 0) {
+      this.renderer.warnOnce(
+        'componentStyles',
+        'component styles have no effect in a terminal; use the ink-* inputs',
+      );
+    }
+    return this.renderer;
+  };
 
   end(): void {
     this.onCommit();

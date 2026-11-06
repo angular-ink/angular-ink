@@ -1,4 +1,7 @@
+import { Component, ViewEncapsulation, type RendererType2, type Type } from '@angular/core';
 import { describe, expect, it, vi } from 'vitest';
+import { InkBox, InkText } from '../elements';
+import { mountTree } from '../platform/mount';
 import { type InkNode } from './node';
 import { InkRendererFactory } from './renderer-factory';
 
@@ -99,4 +102,93 @@ describe('InkRendererFactory', () => {
       expect(warn.mock.calls[0]?.[0]).toMatch(/^angular-ink: /);
     },
   );
+
+  describe('what has no effect in a terminal', () => {
+    const rendererType = (styles: string[]): RendererType2 => ({
+      id: 'x',
+      encapsulation: ViewEncapsulation.None,
+      styles,
+      data: {},
+    });
+
+    it('warns once for the class and style attributes, and not for others', () => {
+      const { r, warn } = setup();
+      const box = r.createElement('ink-box') as InkNode;
+      r.setAttribute(box, 'title', 'a');
+      expect(warn).not.toHaveBeenCalled();
+      r.setAttribute(box, 'class', 'a');
+      r.setAttribute(box, 'class', 'b');
+      r.addClass(box, 'c');
+      expect(warn).toHaveBeenCalledTimes(1);
+      r.setAttribute(box, 'style', 'color: red');
+      r.setStyle(box, 'color', 'red');
+      expect(warn).toHaveBeenCalledTimes(2);
+      expect(warn.mock.calls.map(([message]) => message as string)).toEqual([
+        expect.stringMatching(/^angular-ink: classes /),
+        expect.stringMatching(/^angular-ink: styles /),
+      ]);
+    });
+
+    it('warns once for component styles, and not for a component without any', () => {
+      const { factory, warn } = setup();
+      factory.createRenderer(null, rendererType([]));
+      factory.createRenderer(null, null);
+      expect(warn).not.toHaveBeenCalled();
+      factory.createRenderer(null, rendererType(['a { color: red }']));
+      factory.createRenderer(null, rendererType(['b { color: red }']));
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]?.[0]).toMatch(/^angular-ink: component styles /);
+    });
+
+    @Component({
+      imports: [InkBox, InkText],
+      template: `<ink-box class="a"><ink-text class="b">x</ink-text></ink-box>`,
+    })
+    class StaticClass {}
+
+    @Component({
+      imports: [InkBox],
+      template: `<ink-box style="color: red" />`,
+    })
+    class StaticStyle {}
+
+    @Component({
+      imports: [InkBox],
+      styles: 'ink-box { color: red; }',
+      template: `<ink-box />`,
+    })
+    class ComponentStyles {}
+
+    @Component({
+      imports: [InkBox, InkText],
+      template: `<ink-box borderStyle="round"><ink-text color="red">x</ink-text></ink-box>`,
+    })
+    class Clean {}
+
+    async function warningsOf(component: Type<unknown>): Promise<string[]> {
+      const warn = vi.fn<(message: string) => void>();
+      const tree = mountTree(component, {
+        onCommit: vi.fn(),
+        warn,
+        errorHandler: { handleError: vi.fn() },
+      });
+      await tree.whenStable();
+      tree.destroy();
+      return warn.mock.calls.map(([message]) => message);
+    }
+
+    it.each([
+      ['a static class', StaticClass, 'classes'],
+      ['a static style', StaticStyle, 'styles'],
+      ['component styles', ComponentStyles, 'component styles'],
+    ])('warns for %s in a real template', async (_name, component, word) => {
+      expect(await warningsOf(component)).toEqual([
+        expect.stringMatching(new RegExp(`^angular-ink: ${word} `)),
+      ]);
+    });
+
+    it('stays quiet for a template that uses only inputs', async () => {
+      expect(await warningsOf(Clean)).toEqual([]);
+    });
+  });
 });
