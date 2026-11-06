@@ -65,7 +65,12 @@ the engine's, so a test sees exactly what a user would.
 ### State machine: `KeyParser`
 
 Input arrives in arbitrary chunks, so the parser keeps its state between them. It is linear, with
-no regex that can backtrack, and an incomplete sequence is bounded by `MAX_SEQUENCE_BYTES`.
+no regex that can backtrack, and an incomplete sequence is bounded by `MAX_SEQUENCE_BYTES`. `key.ts`
+says what the bytes of one sequence mean; the state machine only says where a sequence ends.
+
+`InputBus` hands the events out one at a time and waits for the app to settle after each, so every
+key sees the state the previous one left. That is the pressure for a queue: a parser emits a whole
+chunk at once, and change detection is asynchronous.
 
 ### Trees: plain data with explicit traversal
 

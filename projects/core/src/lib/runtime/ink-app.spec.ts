@@ -38,6 +38,7 @@ function newApp(overrides: Partial<InkAppOptions> = {}): { app: InkApp; stdout: 
     stdin: new Sink() as unknown as NodeJS.ReadableStream,
     stderr: new Sink(),
     interactive: true,
+    exitOnCtrlC: true,
     patchConsole: false,
     maxFps: 30,
     yoga,

@@ -52,6 +52,11 @@ export async function renderInkToString<T>(
     waitUntilRenderFlush: () => Promise.resolve(),
     writeStdout: () => undefined,
     writeStderr: () => undefined,
+    stdin,
+    isRawModeSupported: false,
+    setRawMode: () => undefined,
+    listenToKeys: () => () => undefined,
+    listenToPaste: () => () => undefined,
   };
 
   const shown: { frame: CellGrid | null; permanent: string } = { frame: null, permanent: '' };

@@ -81,6 +81,7 @@ export async function renderInk<T>(
       interactive:
         settings.interactive ??
         (!isInCi(process.env) && (stdout as Partial<NodeJS.WriteStream>).isTTY === true),
+      exitOnCtrlC: settings.exitOnCtrlC ?? true,
       patchConsole: settings.patchConsole ?? true,
       maxFps: settings.maxFps ?? 30,
       yoga,

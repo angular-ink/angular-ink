@@ -28,7 +28,7 @@ export interface StyledSpan {
 }
 
 const ESC = '\x1b';
-const MAX_SEQUENCE_BYTES = 256;
+export const MAX_SEQUENCE_BYTES = 256;
 
 /**
  * Keeps SGR and drops every other control: cursor and screen sequences, OSC (so OSC 8 links lose

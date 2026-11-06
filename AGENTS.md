@@ -75,9 +75,11 @@ then runs the command as uid 1000.
 - **Bounded work.** Parsers are linear (no super-linear regex). These limits throw an
   `angular-ink:` error:
   - text of more than 1 MiB (`MAX_TEXT_BYTES = 1_048_576`);
-  - nesting deeper than 256 (`MAX_DEPTH`);
+  - nesting deeper than 256 (`MAX_DEPTH`).
+
+  Input comes from outside the app, so its limits drop the excess and recover, and never throw:
   - an incomplete input sequence longer than 256 bytes (`MAX_SEQUENCE_BYTES`);
-  - a paste of more than 10 MiB (`MAX_PASTE_BYTES = 10_485_760`).
+  - a paste of more than 10 MiB (`MAX_PASTE_BYTES = 10_485_760`), with a warning in development.
 - **The terminal always comes back.** On `SIGINT`, `SIGTERM`, `SIGHUP`, an uncaught exception or
   an unhandled rejection, the terminal returns to normal: cursor visible, raw mode and bracketed
   paste off. A closed stdout (`cli | head -1`, `EPIPE`) exits without a stack trace.

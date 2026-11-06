@@ -12,8 +12,13 @@ export interface RenderForTestOptions {
   rows?: number;
   inputs?: Record<string, unknown>;
   providers?: readonly (Provider | EnvironmentProviders)[];
-  /** Whether the fake stdout and stdin claim to be a TTY. Defaults to false. */
+  /**
+   * Whether the fake stdout and stdin claim to be a TTY. By default, like ink-testing-library, stdin
+   * is one and stdout is not, so keys work and no terminal modes are written.
+   */
   isTty?: boolean;
+  /** Whether Ctrl+C ends the app. Defaults to false: here it is a key press like any other. */
+  exitOnCtrlC?: boolean;
 }
 
 export interface InkTestInstance {
@@ -38,11 +43,10 @@ export async function renderForTest<T>(
   component: Type<T>,
   options: RenderForTestOptions = {},
 ): Promise<InkTestInstance> {
-  const isTty = options.isTty ?? false;
   const stdout = new FakeStdout(
     options.columns ?? DEFAULT_COLUMNS,
     options.rows ?? DEFAULT_ROWS,
-    isTty,
+    options.isTty ?? false,
   );
   const stderr = new FakeStderr();
   const frames: string[] = [];
@@ -53,14 +57,13 @@ export async function renderForTest<T>(
   const settle = async (): Promise<void> => {
     await app?.waitUntilRenderFlush();
   };
-  const stdin = new FakeStdin({ isTTY: isTty, settle });
+  const stdin = new FakeStdin({ isTTY: options.isTty ?? true, settle });
 
   app = await renderInk(component, {
     stdout,
     stderr,
     stdin: stdin as unknown as NodeJS.ReadableStream,
-    // Ctrl+C is a key press here, never the end of the test.
-    exitOnCtrlC: false,
+    exitOnCtrlC: options.exitOnCtrlC ?? false,
     patchConsole: false,
     // Needed for resize events; frames go to the sink, so no cursor moves are written.
     interactive: true,

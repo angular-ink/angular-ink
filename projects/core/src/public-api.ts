@@ -28,5 +28,13 @@ export {
   type StdoutProps,
   type WindowSize,
 } from './lib/runtime/inject';
+export {
+  injectInput,
+  injectPaste,
+  injectStdin,
+  type InputOptions,
+  type StdinProps,
+} from './lib/input/inject-input';
+export type { Key } from './lib/input/key';
 export type { InkNode, InkNode as DOMElement } from './lib/tree/node';
 export { gridToString as ɵgridToString, type CellGrid as ɵCellGrid } from './lib/engine/grid';

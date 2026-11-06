@@ -40,6 +40,27 @@ Nothing a test sets up outlives it:
 | `elements/` | 90    |          |
 | `input/`    | 90    |          |
 
+### Key sequences
+
+`e2e/fixtures/keys/` holds the sequences terminals send, one file per terminal and key, and
+`input/key-parser.spec.ts` parses every file. `node scripts/capture-key-fixtures.mjs` writes the
+ones for `xterm`, `kitty` (without its protocol) and `tmux`: the sequences each one documents,
+passed through a real pty.
+
+The maintainer adds the rest by hand, as `gnome-<key>.bin` and `vscode-<key>.bin` with the key names the spec lists,
+from a real session of **GNOME Terminal** and of the **VS Code terminal**. Run
+`sh -c 'stty raw -echo; dd bs=16 count=1 of=gnome-up.bin; stty sane'`, press the key once,
+and go through:
+
+- arrows, also in application mode (`app-up`, `app-down`: first run `printf '\033[?1h'`);
+- Home, End, Page Up, Page Down, Insert, Delete;
+- F1, F5, F12;
+- Return, Tab, Shift+Tab, Backspace;
+- Ctrl+A, Ctrl+C (`stty raw` lets it through), Ctrl+Up, Shift+Up, Alt+Up, Alt+A, Alt+Return.
+
+The spec checks that `xterm`, `kitty` and `tmux` have every key. Add a terminal to that list once
+its files are in.
+
 ## Formatting and lint
 
 ### Prettier 3

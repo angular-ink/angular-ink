@@ -1,5 +1,5 @@
-import { Component, input } from '@angular/core';
-import { InkText, injectApp } from '@angular-ink/core';
+import { Component, input, signal } from '@angular/core';
+import { InkText, injectApp, injectInput } from '@angular-ink/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FakeStdin } from './fake-streams';
 import { cleanup, renderForTest } from './render-for-test';
@@ -31,6 +31,21 @@ class Quitter {
   }
 }
 
+@Component({
+  selector: 'ink-test-key-count',
+  imports: [InkText],
+  template: `<ink-text>{{ last() }}</ink-text>`,
+})
+class LastKey {
+  readonly last = signal('none');
+
+  constructor() {
+    injectInput((text, key) => {
+      this.last.set(`${key.ctrl ? 'ctrl+' : ''}${text}`);
+    });
+  }
+}
+
 afterEach(() => {
   cleanup();
 });
@@ -40,6 +55,18 @@ describe('renderForTest', () => {
     const test = await renderForTest(Line);
     expect(test.stdout.columns).toBe(100);
     expect(test.lastFrame()?.split('\n')[0]).toBe('-'.repeat(100));
+  });
+
+  it('has a TTY for stdin and not for stdout by default, like ink-testing-library (TEST-07, 09)', async () => {
+    const test = await renderForTest(Label);
+    expect(test.stdin.isTTY).toBe(true);
+    expect(test.stdout.isTTY).toBe(false);
+  });
+
+  it('isTty sets stdin and stdout together', async () => {
+    const test = await renderForTest(Label, { isTty: false });
+    expect(test.stdin.isTTY).toBe(false);
+    expect(test.stdout.isTTY).toBe(false);
   });
 
   it('takes columns, rows and isTTY', async () => {
@@ -95,9 +122,11 @@ describe('renderForTest', () => {
   });
 
   it('does not exit on Ctrl+C (TEST-01)', async () => {
-    const test = await renderForTest(Label);
+    const test = await renderForTest(LastKey);
     await test.stdin.press('ctrl+c');
-    expect(test.lastFrame()).toBe('value 0');
+    expect(test.lastFrame()).toBe('ctrl+c');
+    await test.stdin.write('a');
+    expect(test.lastFrame()).toBe('a');
   });
 
   it('has a stderr that records writes', async () => {

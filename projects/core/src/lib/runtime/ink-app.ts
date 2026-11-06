@@ -11,6 +11,9 @@ import { detectColorLevel, type ColorLevel } from '../engine/color-level';
 import type { CellGrid } from '../engine/grid';
 import { findStaticNodes, layoutTree } from '../engine/layout';
 import { paintStatic, paintTree } from '../engine/paint';
+import { InputBus, type KeyHandler, type PasteHandler } from '../input/input-bus';
+import { KeyParser } from '../input/key-parser';
+import { RawMode } from '../input/raw-mode';
 import { mountTree, type MountedTree } from '../platform/mount';
 import { patchConsole } from './console-patch';
 import { paintErrorOverview } from './error-overview';
@@ -22,6 +25,7 @@ import { createStreamPort, type StreamPort } from './terminal-port';
 
 const HIDE_CURSOR = '\x1b[?25l';
 const SHOW_CURSOR = '\x1b[?25h';
+const BRACKETED_PASTE_ON = '\x1b[?2004h';
 const BRACKETED_PASTE_OFF = '\x1b[?2004l';
 const ERASE_LINE_END = '\x1b[K';
 
@@ -30,6 +34,7 @@ export interface InkAppOptions {
   readonly stdin: NodeJS.ReadableStream;
   readonly stderr: NodeJS.WritableStream;
   readonly interactive: boolean;
+  readonly exitOnCtrlC: boolean;
   readonly patchConsole: boolean;
   readonly maxFps: number;
   readonly yoga: Yoga;
@@ -55,6 +60,7 @@ const toError = (value: unknown): Error => (isError(value) ? value : new Error(S
 export class InkApp implements InkRuntime {
   readonly stdout: NodeJS.WritableStream;
   readonly stderr: NodeJS.WritableStream;
+  readonly stdin: NodeJS.ReadableStream;
   readonly windowSize;
 
   private readonly size = signal<WindowSize>({ columns: 0, rows: 0 });
@@ -67,6 +73,9 @@ export class InkApp implements InkRuntime {
   private readonly log: FrameLog;
   private readonly scheduler: FrameScheduler;
   private readonly exitPromise: Promise<unknown>;
+  private readonly parser: KeyParser;
+  private readonly inputBus: InputBus;
+  private readonly rawMode: RawMode;
 
   private resolveExit!: (result: unknown) => void;
   private rejectExit!: (error: Error) => void;
@@ -89,6 +98,11 @@ export class InkApp implements InkRuntime {
   private restored = false;
   private warnedAboutReuse = false;
   private warnedAboutStatics = false;
+  private readonly warnedAboutInput = new Set<string>();
+  private warnedAboutPaste = false;
+  /** How many paste handlers keep bracketed paste on. */
+  private pasteListeners = 0;
+  private bracketedPasteOn = false;
   private restoreConsole: (() => void) | null = null;
   private stopResizing: (() => void) | null = null;
   private removeExitHooks: (() => void) | null = null;
@@ -97,6 +111,7 @@ export class InkApp implements InkRuntime {
   constructor(private readonly options: InkAppOptions) {
     this.stdout = options.stdout;
     this.stderr = options.stderr;
+    this.stdin = options.stdin;
     this.windowSize = this.size.asReadonly();
     this.port = createStreamPort(options.stdout, () => {
       this.portClosed = true;
@@ -118,6 +133,39 @@ export class InkApp implements InkRuntime {
     this.scheduler = new FrameScheduler(() => {
       this.drawFrame();
     }, options.maxFps);
+    this.inputBus = new InputBus({
+      exitOnCtrlC: options.exitOnCtrlC,
+      onExitKey: () => {
+        this.exit();
+      },
+      settle: () => this.tree?.whenStable() ?? Promise.resolve(),
+      onError: (error) => {
+        this.fail(error);
+      },
+    });
+    this.parser = new KeyParser(
+      (event) => {
+        this.inputBus.push(event);
+      },
+      (flush, ms) => {
+        const timer = setTimeout(flush, ms);
+        return () => {
+          clearTimeout(timer);
+        };
+      },
+      (message) => {
+        this.warnAboutPaste(message);
+      },
+    );
+    this.rawMode = new RawMode(
+      options.stdin,
+      (chunk) => {
+        this.parser.feed(chunk);
+      },
+      () => {
+        this.parser.reset();
+      },
+    );
     this.exitPromise = new Promise((resolve, reject) => {
       this.resolveExit = resolve;
       this.rejectExit = reject;
@@ -154,6 +202,8 @@ export class InkApp implements InkRuntime {
       this.tree = null;
       this.component = component;
       this.warnedAboutStatics = false;
+      this.warnedAboutInput.clear();
+      this.warnedAboutPaste = false;
       this.tree = mountTree(component, {
         inputs,
         providers: [{ provide: InkRuntime, useValue: this }, ...this.options.providers],
@@ -246,6 +296,7 @@ export class InkApp implements InkRuntime {
         setImmediate(resolve);
       });
     }
+    if (this.phase === 'running') await this.inputBus.idle();
     if (this.phase !== 'running') {
       await this.exitPromise.catch(() => undefined);
       return;
@@ -293,6 +344,63 @@ export class InkApp implements InkRuntime {
     process.stderr.write(
       'angular-ink: renderInk() was called again for the same stdout before the previous instance was unmounted. Reusing stdout across renderInk() calls is unsupported; call unmount() first.\n',
     );
+  }
+
+  get isRawModeSupported(): boolean {
+    return this.rawMode.supported;
+  }
+
+  setRawMode(enabled: boolean): void {
+    if (this.phase !== 'running') return;
+    if (enabled) this.rawMode.acquire();
+    else this.rawMode.release();
+  }
+
+  listenToKeys(handler: KeyHandler): () => void {
+    if (!this.canListen('injectInput')) return noop;
+    const stop = this.inputBus.onKey(handler);
+    this.rawMode.acquire();
+    return () => {
+      stop();
+      this.rawMode.release();
+    };
+  }
+
+  listenToPaste(handler: PasteHandler): () => void {
+    if (!this.canListen('injectPaste')) return noop;
+    const stop = this.inputBus.onPaste(handler);
+    this.rawMode.acquire();
+    this.pasteListeners += 1;
+    this.setBracketedPaste(true);
+    return () => {
+      stop();
+      this.rawMode.release();
+      this.pasteListeners -= 1;
+      if (this.pasteListeners === 0) this.setBracketedPaste(false);
+    };
+  }
+
+  private canListen(caller: string): boolean {
+    if (this.phase !== 'running') return false;
+    if (this.rawMode.supported) return true;
+    if (!this.warnedAboutInput.has(caller) && isDevMode()) {
+      this.warnedAboutInput.add(caller);
+      this.writeStderr(`angular-ink: stdin is not a TTY; ${caller} is inactive\n`);
+    }
+    return false;
+  }
+
+  private setBracketedPaste(on: boolean): void {
+    // On the way out, restore() writes what is owed.
+    if (this.phase !== 'running' || !this.port.isTty || on === this.bracketedPasteOn) return;
+    this.bracketedPasteOn = on;
+    this.send(on ? BRACKETED_PASTE_ON : BRACKETED_PASTE_OFF);
+  }
+
+  private warnAboutPaste(message: string): void {
+    if (this.warnedAboutPaste || !isDevMode()) return;
+    this.warnedAboutPaste = true;
+    this.writeStderr(message);
   }
 
   private fail(error: unknown): void {
@@ -442,26 +550,18 @@ export class InkApp implements InkRuntime {
     if (this.restored) return;
     this.restored = true;
     this.restoreConsole?.();
-    this.setRawModeOff();
+    this.inputBus.stop();
+    this.rawMode.restore();
     const bytes = this.restoreBytes();
     if (bytes !== '' && !this.portClosed) this.port.writeNow(bytes);
   }
 
   private restoreBytes(): string {
     if (this.usesCursor) return SHOW_CURSOR + BRACKETED_PASTE_OFF;
-    if (this.drawsInPlace || this.options.frameSink !== undefined) return '';
+    const pasteOff = this.bracketedPasteOn ? BRACKETED_PASTE_OFF : '';
+    if (this.drawsInPlace || this.options.frameSink !== undefined) return pasteOff;
     const text = this.lastGrid === null ? '' : frameText(this.lastGrid, this.level);
-    return `${text}\n`;
-  }
-
-  private setRawModeOff(): void {
-    const stdin = this.options.stdin as Partial<NodeJS.ReadStream>;
-    if (!stdin.isTTY) return;
-    try {
-      stdin.setRawMode?.(false);
-    } catch {
-      // A terminal that went away has no mode to restore.
-    }
+    return `${pasteOff}${text}\n`;
   }
 
   // The first frame must start at column 0, and only the terminal knows where the cursor is. From
@@ -472,6 +572,8 @@ export class InkApp implements InkRuntime {
     return `${' '.repeat(this.port.columns)}\r${ERASE_LINE_END}`;
   }
 }
+
+const noop = (): void => undefined;
 
 /** The frame is drawn from column 0, so text with no line end needs one. */
 function endLine(data: string): string {

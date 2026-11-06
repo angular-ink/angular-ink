@@ -12,6 +12,12 @@ export default defineConfig({
         find: /^@angular-ink\/core$/,
         replacement: fileURLToPath(new URL('./projects/core/src/public-api.ts', import.meta.url)),
       },
+      {
+        find: /^@angular-ink\/testing$/,
+        replacement: fileURLToPath(
+          new URL('./projects/testing/src/public-api.ts', import.meta.url),
+        ),
+      },
     ],
   },
   test: {

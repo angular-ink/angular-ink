@@ -1,4 +1,5 @@
 import { inject, type Signal } from '@angular/core';
+import type { KeyHandler, PasteHandler } from '../input/input-bus';
 
 /** The running app, as its components see it. Internal: the public face is the `inject*` below. */
 export abstract class InkRuntime {
@@ -9,6 +10,13 @@ export abstract class InkRuntime {
   abstract waitUntilRenderFlush(): Promise<void>;
   abstract writeStdout(data: string): void;
   abstract writeStderr(data: string): void;
+  abstract readonly stdin: NodeJS.ReadableStream;
+  abstract readonly isRawModeSupported: boolean;
+  abstract setRawMode(enabled: boolean): void;
+  /** Returns how to stop. */
+  abstract listenToKeys(handler: KeyHandler): () => void;
+  /** Returns how to stop. */
+  abstract listenToPaste(handler: PasteHandler): () => void;
 }
 
 export interface WindowSize {
@@ -35,7 +43,7 @@ export interface StderrProps {
   write(data: string): void;
 }
 
-function runtime(caller: string): InkRuntime {
+export function injectRuntime(caller: string): InkRuntime {
   const found = inject(InkRuntime, { optional: true });
   if (found === null) {
     throw new Error(`angular-ink: ${caller}() must be called inside an app started by renderInk()`);
@@ -44,7 +52,7 @@ function runtime(caller: string): InkRuntime {
 }
 
 export function injectApp(): AppProps {
-  const app = runtime('injectApp');
+  const app = injectRuntime('injectApp');
   return {
     exit: (errorOrResult) => {
       app.exit(errorOrResult);
@@ -54,7 +62,7 @@ export function injectApp(): AppProps {
 }
 
 export function injectStdout(): StdoutProps {
-  const app = runtime('injectStdout');
+  const app = injectRuntime('injectStdout');
   return {
     stdout: app.stdout,
     write: (data) => {
@@ -64,7 +72,7 @@ export function injectStdout(): StdoutProps {
 }
 
 export function injectStderr(): StderrProps {
-  const app = runtime('injectStderr');
+  const app = injectRuntime('injectStderr');
   return {
     stderr: app.stderr,
     write: (data) => {
@@ -74,5 +82,5 @@ export function injectStderr(): StderrProps {
 }
 
 export function injectWindowSize(): Signal<WindowSize> {
-  return runtime('injectWindowSize').windowSize;
+  return injectRuntime('injectWindowSize').windowSize;
 }

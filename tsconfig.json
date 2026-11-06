@@ -4,7 +4,8 @@
   "compileOnSave": false,
   "compilerOptions": {
     "paths": {
-      "@angular-ink/core": ["./projects/core/src/public-api.ts"]
+      "@angular-ink/core": ["./projects/core/src/public-api.ts"],
+      "@angular-ink/testing": ["./projects/testing/src/public-api.ts"]
     },
     "strict": true,
     "noUncheckedIndexedAccess": true,
