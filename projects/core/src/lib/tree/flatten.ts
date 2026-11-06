@@ -64,8 +64,8 @@ function collect(source: InkNode, target: InkNode, inkParent: string, depth: num
       // Host: its children stand in its place, one level deeper in the source.
       collect(child, target, inkParent, depth + 1);
     } else {
-      if (child.tag === 'ink-box' && holdsText(inkParent)) {
-        throw new Error(`angular-ink: <ink-box> can't be inside <${inkParent}>`);
+      if ((child.tag === 'ink-box' || child.tag === 'ink-spacer') && holdsText(inkParent)) {
+        throw new Error(`angular-ink: <${child.tag}> can't be inside <${inkParent}>`);
       }
       const copy = createNode('element', child.tag);
       copy.owner = child.owner;

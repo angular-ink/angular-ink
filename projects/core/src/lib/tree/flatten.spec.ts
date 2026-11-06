@@ -80,6 +80,14 @@ describe('flattenHosts', () => {
     );
   });
 
+  it('rejects ink-spacer inside ink-text, also through a host, as Ink does', () => {
+    const message = "angular-ink: <ink-spacer> can't be inside <ink-text>";
+    expect(() => flattenHosts(el('ink-root', el('ink-text', el('ink-spacer'))))).toThrow(message);
+    expect(() =>
+      flattenHosts(el('ink-root', el('ink-text', el('host', el('ink-spacer'))))),
+    ).toThrow(message);
+  });
+
   it('limits text to 1 MiB', () => {
     const ok = el('ink-root', el('ink-text', text('a'.repeat(1_048_576))));
     expect(() => flattenHosts(ok)).not.toThrow();
