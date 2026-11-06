@@ -1,7 +1,9 @@
+import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { installExitHooks, printFatal, type ExitHookTarget } from './exit-hooks';
 
@@ -10,6 +12,8 @@ function fakeProcess() {
   const exit = vi.fn();
   const target: ExitHookTarget = {
     on: (event, listener) => emitter.on(event, listener),
+    prependListener: (event, listener) => emitter.prependListener(event, listener),
+    listeners: (event) => emitter.listeners(event),
     off: (event, listener) => emitter.off(event, listener),
     exit,
   };
@@ -35,6 +39,113 @@ describe('installExitHooks', () => {
     expect(restore).toHaveBeenCalledTimes(1);
     expect(exit).toHaveBeenCalledTimes(1);
     expect(exit).toHaveBeenCalledWith(code);
+  });
+
+  describe.each([
+    ['SIGINT', 130],
+    ['SIGTERM', 143],
+    ['SIGHUP', 129],
+  ])('on %s with a listener of the app', (signal, code) => {
+    it('restores and leaves the exit to the app', () => {
+      const { emitter, exit, target } = fakeProcess();
+      const restore = vi.fn();
+      emitter.on(signal, vi.fn());
+      installExitHooks(restore, target, vi.fn());
+      emitter.emit(signal);
+      expect(restore).toHaveBeenCalledTimes(1);
+      expect(exit).not.toHaveBeenCalled();
+    });
+
+    it('sees a listener added after the hooks, and a once listener', () => {
+      const { emitter, exit, target } = fakeProcess();
+      installExitHooks(vi.fn(), target, vi.fn());
+      emitter.once(signal, vi.fn());
+      emitter.emit(signal);
+      expect(exit).not.toHaveBeenCalled();
+      // The once listener is gone now, so the next signal ends the process.
+      emitter.emit(signal);
+      expect(exit).toHaveBeenCalledWith(code);
+    });
+
+    it('sees a once listener added before the hooks, by running first', () => {
+      const { emitter, exit, target } = fakeProcess();
+      emitter.once(signal, vi.fn());
+      installExitHooks(vi.fn(), target, vi.fn());
+      emitter.emit(signal);
+      expect(exit).not.toHaveBeenCalled();
+    });
+
+    it('still exits when the other listeners are the hooks of another app', () => {
+      const { emitter, exit, target } = fakeProcess();
+      const first = vi.fn();
+      const second = vi.fn();
+      installExitHooks(first, target, vi.fn());
+      installExitHooks(second, target, vi.fn());
+      emitter.emit(signal);
+      expect(exit).toHaveBeenCalledWith(code);
+      emitter.emit('exit', code);
+      expect(first).toHaveBeenCalledTimes(1);
+      expect(second).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('always exits on a fatal error, whoever else listens', () => {
+    const { emitter, exit, target } = fakeProcess();
+    emitter.on('uncaughtException', vi.fn());
+    installExitHooks(vi.fn(), target, vi.fn());
+    emitter.emit('uncaughtException', new Error('boom'));
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  describe('in a real process', () => {
+    const HOOKS = fileURLToPath(new URL('./exit-hooks.ts', import.meta.url));
+
+    /** Runs `body` after the hooks are in, sends SIGTERM once it says ready, and returns the end. */
+    function runAndTerminate(body: string) {
+      const script = `
+        import { installExitHooks } from ${JSON.stringify(HOOKS)};
+        import { writeSync } from 'node:fs';
+        installExitHooks(() => writeSync(1, 'restored\\n'));
+        ${body}
+        writeSync(1, 'ready\\n');
+        setInterval(() => undefined, 1000);
+      `;
+      const child = spawn(
+        process.execPath,
+        ['--experimental-strip-types', '--no-warnings', '--input-type=module', '-e', script],
+        { stdio: ['ignore', 'pipe', 'inherit'] },
+      );
+      let stdout = '';
+      return new Promise<{ code: number | null; stdout: string }>((resolve, reject) => {
+        child.on('error', reject);
+        child.stdout.on('data', (chunk: Buffer) => {
+          const before = stdout;
+          stdout += chunk.toString();
+          if (!before.includes('ready') && stdout.includes('ready')) child.kill('SIGTERM');
+        });
+        child.on('close', (code) => {
+          resolve({ code, stdout });
+        });
+      });
+    }
+
+    it('lets the async cleanup of the app finish, with the terminal restored first', async () => {
+      const { code, stdout } = await runAndTerminate(`
+        process.on('SIGTERM', async () => {
+          await new Promise((done) => setTimeout(done, 50));
+          writeSync(1, 'cleaned\\n');
+          process.exit(7);
+        });
+      `);
+      expect(stdout).toBe('ready\nrestored\ncleaned\n');
+      expect(code).toBe(7);
+    }, 30_000);
+
+    it('ends with the exit code of the signal when nobody else listens', async () => {
+      const { code, stdout } = await runAndTerminate('');
+      expect(stdout).toBe('ready\nrestored\n');
+      expect(code).toBe(143);
+    }, 30_000);
   });
 
   it('restores on a plain exit without calling exit again', () => {

@@ -863,6 +863,26 @@ describe('renderInk', () => {
       expect(exit).toHaveBeenCalledWith(code);
     });
 
+    it('with a SIGTERM listener of the app, restores and lets the app unmount later', async () => {
+      const exit = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+      const before = process.listeners('SIGTERM');
+      const appCleanup = vi.fn();
+      process.on('SIGTERM', appCleanup);
+      try {
+        const stdout = new FakeTerminal();
+        const instance = await render(Hello, { stdout });
+        newListeners('SIGTERM', [...before, appCleanup])[0]?.();
+        await vi.waitFor(() => {
+          expect(stdout.output).toContain(SHOW_CURSOR);
+        });
+        expect(exit).not.toHaveBeenCalled();
+        instance.unmount();
+        await expect(instance.waitUntilExit()).resolves.toBeUndefined();
+      } finally {
+        process.off('SIGTERM', appCleanup);
+      }
+    });
+
     it('removes its listeners on unmount', async () => {
       const count = (event: string): number =>
         (process as unknown as { listenerCount(name: string): number }).listenerCount(event);
