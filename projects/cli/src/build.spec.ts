@@ -1,9 +1,10 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { build } from 'esbuild';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { buildCli } from './build.js';
 import { linkerPlugin } from './linker-plugin.js';
@@ -192,6 +193,74 @@ process.stdout.write(${value});`,
         await buildCli({ entry: 'main.ts', out: 'out.mjs', cwd, minify });
         const { stdout } = await exec('node', ['out.mjs'], { cwd, timeout: 30_000 });
         expect(stdout).toMatch(/^\/+$/);
+      },
+      BUILD_TIMEOUT,
+    );
+  });
+
+  describe('killed by a signal in the middle of a build', () => {
+    /** Runs `buildCli` in a process of its own and signals it once the temporary folder exists. */
+    async function buildAndSignal(signal: NodeJS.Signals, setup = '') {
+      const cwd = await makeCase({ 'main.ts': HELLO });
+      const library = join(cwd, 'build-library.mjs');
+      await build({
+        entryPoints: [join(REPO, 'projects/cli/src/build.ts')],
+        outfile: library,
+        bundle: true,
+        platform: 'node',
+        format: 'esm',
+        packages: 'external',
+        logLevel: 'silent',
+      });
+      const script = `
+        import { buildCli } from ${JSON.stringify(library)};
+        ${setup}
+        await buildCli({ entry: 'main.ts', out: 'o.mjs', cwd: ${JSON.stringify(cwd)} });
+        console.log('finished');
+      `;
+      const child = spawn(process.execPath, ['--input-type=module', '-e', script], {
+        cwd: join(REPO, 'out-tsc'),
+        stdio: ['ignore', 'pipe', 'inherit'],
+      });
+      const closed = new Promise<{ code: number | null; signal: string | null; stdout: string }>(
+        (resolve) => {
+          let stdout = '';
+          child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()));
+          child.on('close', (code, closedBy) => {
+            resolve({ code, signal: closedBy, stdout });
+          });
+        },
+      );
+      const hasTemporaryFolder = async (): Promise<boolean> =>
+        (await readdir(cwd)).some((name) => name.startsWith('.angular-ink-build-'));
+      await vi.waitFor(
+        async () => {
+          expect(await hasTemporaryFolder()).toBe(true);
+        },
+        { timeout: 60_000, interval: 5 },
+      );
+      child.kill(signal);
+      return { ...(await closed), left: await hasTemporaryFolder() };
+    }
+
+    it.each([
+      ['SIGINT', 130],
+      ['SIGTERM', 143],
+      ['SIGHUP', 129],
+    ] as const)(
+      'removes the temporary folder on %s and exits with %i',
+      async (signal, code) => {
+        const end = await buildAndSignal(signal);
+        expect(end).toEqual({ code, signal: null, stdout: '', left: false });
+      },
+      BUILD_TIMEOUT,
+    );
+
+    it(
+      'leaves the exit to a process that listens for the signal',
+      async () => {
+        const end = await buildAndSignal('SIGINT', `process.on('SIGINT', () => process.exit(9));`);
+        expect(end).toEqual({ code: 9, signal: null, stdout: '', left: false });
       },
       BUILD_TIMEOUT,
     );

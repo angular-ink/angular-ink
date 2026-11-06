@@ -8,7 +8,7 @@ import {
   type ParsedConfiguration,
 } from '@angular/compiler-cli';
 import { build, formatMessages } from 'esbuild';
-import { existsSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { chmod, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import ts from 'typescript';
@@ -145,6 +145,31 @@ async function esbuildTsconfig(
   return { tsconfig: path };
 }
 
+const SIGNAL_EXIT_CODES: Readonly<Record<string, number>> = {
+  SIGINT: 130,
+  SIGTERM: 143,
+  SIGHUP: 129,
+};
+
+/**
+ * Removes `folder` if a signal ends the build, and returns how to stop watching. The compiler runs
+ * synchronously, so a signal that arrives during it takes effect when it finishes. A process with
+ * its own listener decides when it ends.
+ */
+function removeOnSignal(folder: string): () => void {
+  const listeners = Object.entries(SIGNAL_EXIT_CODES).map(([signal, code]) => {
+    const listener = (): void => {
+      rmSync(folder, { recursive: true, force: true });
+      if (process.listenerCount(signal) === 1) process.exit(code);
+    };
+    process.prependListener(signal, listener);
+    return { signal, listener };
+  });
+  return () => {
+    for (const { signal, listener } of listeners) process.off(signal, listener);
+  };
+}
+
 /** Compiles a terminal app ahead of time and bundles it into one executable file. */
 export async function buildCli(options: BuildCliOptions): Promise<BuildCliResult> {
   const cwd = resolve(options.cwd ?? process.cwd());
@@ -162,6 +187,7 @@ export async function buildCli(options: BuildCliOptions): Promise<BuildCliResult
 
   // Under the cwd, so the emitted files find the same node_modules as their sources.
   const outDir = await mkdtemp(join(cwd, '.angular-ink-build-'));
+  const stopWatchingSignals = removeOnSignal(outDir);
   try {
     const projectOptions = config?.options ?? DEFAULT_COMPILER_OPTIONS;
     const { diagnostics } = performCompilation({
@@ -221,6 +247,7 @@ export async function buildCli(options: BuildCliOptions): Promise<BuildCliResult
     );
     return { bytes: (await stat(out)).size, hasCompiler, warnings };
   } finally {
+    stopWatchingSignals();
     await rm(outDir, { recursive: true, force: true });
   }
 }
