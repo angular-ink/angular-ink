@@ -741,6 +741,19 @@ describe('layoutTree box styles (INK-BOX-STYLE-01..42)', () => {
   });
 });
 
+describe('layoutTree size strings', () => {
+  const widthOf = (width: unknown) => root(40, box({ width })).children[0]?.width;
+
+  it('reads a string with no percent sign as a percentage, as Ink does', () => {
+    expect(widthOf('50x')).toBe(20);
+    expect(widthOf('25')).toBe(10);
+  });
+
+  it('leaves a string with no number at the default', () => {
+    expect(widthOf('wide')).toBe(widthOf(undefined));
+  });
+});
+
 describe('layoutTree text (INK-TEXT-13)', () => {
   const textLayout = (columns: number, node: InkNode): LayoutBox => {
     const found = root(columns, box({}, node)).children[0]?.children[0];
@@ -845,7 +858,11 @@ describe('layoutTree memory', () => {
 
   it('frees the Yoga tree when Yoga rejects a style', () => {
     const free = spyOnFree();
-    expect(() => root(10, box({ width: '%' }))).toThrow();
+    const prototype = Object.getPrototypeOf(yoga.Node.create()) as { setWidth(): void };
+    vi.spyOn(prototype, 'setWidth').mockImplementation(() => {
+      throw new Error('rejected');
+    });
+    expect(() => root(10, box({ width: 5 }))).toThrow();
     expect(free).toHaveBeenCalledTimes(2);
   });
 

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { mountTree } from '../platform/mount';
 import type { InkNode } from '../tree/node';
 import { INK_ELEMENTS, InkBox, InkNewline, InkSpacer, InkStatic, InkText, InkTransform } from '.';
+import { sizeAttribute } from './attributes';
 
 function mount(component: Type<unknown>, inputs?: Record<string, unknown>) {
   const commits: string[][] = [];
@@ -254,5 +255,22 @@ describe('InkStatic', () => {
 describe('INK_ELEMENTS', () => {
   it('lists the six elements', () => {
     expect(INK_ELEMENTS).toEqual([InkBox, InkText, InkNewline, InkSpacer, InkStatic, InkTransform]);
+  });
+});
+
+describe('sizeAttribute', () => {
+  it('turns a number in a string into cells, as the {4} of Ink', () => {
+    expect(sizeAttribute('4')).toBe(4);
+    expect(sizeAttribute(4)).toBe(4);
+  });
+
+  it('leaves any other string for the engine, which reads it as Ink does', () => {
+    expect(sizeAttribute('50%')).toBe('50%');
+    expect(sizeAttribute('50x')).toBe('50x');
+  });
+
+  it('keeps unset as unset', () => {
+    expect(sizeAttribute(undefined)).toBeUndefined();
+    expect(sizeAttribute(null)).toBeUndefined();
   });
 });

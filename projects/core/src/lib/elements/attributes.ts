@@ -14,11 +14,14 @@ export function optionalBoolean(value: unknown): boolean | undefined {
   return value === undefined || value === null ? undefined : booleanAttribute(value);
 }
 
-/** Static attributes arrive as strings: `"4"` becomes 4 and `"50%"` stays as it is. */
+/**
+ * Static attributes arrive as strings: `"4"` becomes 4, as the `{4}` of Ink. Any other string goes
+ * to the engine as it is, which reads it as Ink reads a string.
+ */
 export function sizeAttribute(value: unknown): InkSize | undefined {
   if (value === undefined || value === null) return undefined;
-  if (typeof value === 'string' && value.endsWith('%')) return value as InkSize;
-  return numberAttribute(value);
+  const size = numberAttribute(value);
+  return Number.isNaN(size) ? (value as InkSize) : size;
 }
 
 /** The props whose value is defined, so a style left unset never shows up as `undefined`. */

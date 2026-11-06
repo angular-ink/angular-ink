@@ -6,10 +6,13 @@ type Size = number | `${number}%`;
 const asNumber = (value: unknown): number | undefined =>
   typeof value === 'number' ? value : undefined;
 
-const asSize = (value: unknown): Size | undefined =>
-  typeof value === 'number' || (typeof value === 'string' && value.endsWith('%'))
-    ? (value as Size)
-    : undefined;
+/** Any string is a percentage of its leading number, as in Ink: `'50x'` is half the parent. */
+function asSize(value: unknown): Size | undefined {
+  if (typeof value === 'number') return value;
+  if (typeof value !== 'string') return undefined;
+  const percent = Number.parseFloat(value);
+  return Number.isNaN(percent) ? undefined : (`${String(percent)}%` as Size);
+}
 
 interface Tables {
   readonly flexWrap: ReadonlyMap<unknown, Wrap>;
