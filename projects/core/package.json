@@ -1,6 +1,6 @@
 {
   "name": "@angular-ink/core",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "angular-ink — terminal apps from Angular components, with an Ink-inspired API",
   "keywords": [
     "angular",

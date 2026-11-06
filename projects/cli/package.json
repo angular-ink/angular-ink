@@ -1,6 +1,6 @@
 {
   "name": "angular-ink",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Builds an angular-ink terminal app into one executable file, ahead of time",
   "keywords": [
     "angular",

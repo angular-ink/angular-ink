@@ -1,6 +1,6 @@
 {
   "name": "@angular-ink/testing",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Test helpers for angular-ink: a virtual terminal and simulated key presses",
   "keywords": [
     "angular",
@@ -26,7 +26,7 @@
     "node": ">=22"
   },
   "peerDependencies": {
-    "@angular-ink/core": "0.0.0",
+    "@angular-ink/core": "0.1.0",
     "@angular/core": "^22.0.0"
   },
   "dependencies": {
