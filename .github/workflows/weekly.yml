@@ -70,8 +70,8 @@ jobs:
         run: echo "issue=$(node scripts/check-ink-version.mjs)" >> "$GITHUB_OUTPUT"
       - if: steps.ink.outputs.issue != ''
         env:
-          GH_TOKEN: ${ github.token }
-          ISSUE: ${ steps.ink.outputs.issue }
+          GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ steps.ink.outputs.issue }}
         run: |
           title="$(jq -r .title <<<"$ISSUE")"
           body="$(jq -r .body <<<"$ISSUE")"

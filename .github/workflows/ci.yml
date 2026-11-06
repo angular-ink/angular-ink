@@ -88,10 +88,10 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-      # Advisory: npm audit cannot read the ignore list in osv-scanner.toml, so OSV-Scanner below
-      # is the gating scanner. A finding here still shows in the job log and the PR checks.
-      - run: npm audit --omit=dev --audit-level=high
-        continue-on-error: true
+      # Gates on high and critical advisories in every dependency, dev tools included. npm audit
+      # cannot read osv-scanner.toml, so an advisory that cannot reach angular-ink is fixed with an
+      # `overrides` entry in package.json instead of an ignore.
+      - run: npm audit --audit-level=high
 
   osv-scanner:
     runs-on: ubuntu-24.04
@@ -146,7 +146,6 @@ jobs:
       - run: node scripts/check-pack.mjs
 
   e2e:
-    needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -185,18 +184,18 @@ jobs:
       - run: node parity/run.mjs
 
   # The packed tarballs as users get them from npm: installs the three into an empty folder, builds
-  # a hello app with `angular-ink build` and checks what it prints. On the lowest Node major the
-  # CLI supports and on the one the other jobs use, with the repository's Angular, and once with the
+  # a hello app with `angular-ink build` and checks what it prints. On the lowest Node the CLI
+  # supports (22.18.0, the floor of Babel 8) and on the one the other jobs use, with the repository's Angular, and once with the
   # lowest @angular/core the peer range allows, since the core reads a private Angular export.
   pack-install:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
       matrix:
-        node-version: [22, 24]
+        node-version: [22.18.0, 24]
         angular: ['']
         include:
-          - node-version: 22
+          - node-version: 22.18.0
             angular: 22.0.0
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

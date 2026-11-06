@@ -135,13 +135,13 @@ required for merging (a repository setting, listed in `CONTRIBUTING.md`):
 | `lint`           | `eslint .` after `build:core`, and `scripts/check-readme.mjs`                         |
 | `typecheck`      | `npm run typecheck`                                                                   |
 | `test`           | `build:core`, then `vitest run --coverage` with the gates above                       |
-| `audit`          | `npm audit --omit=dev --audit-level=high` (advisory: OSV-Scanner is the gate)         |
+| `audit`          | `npm audit --audit-level=high` over every dependency; fails on high or critical       |
 | `osv-scanner`    | `scripts/check-osv-ignores.mjs`, then OSV-Scanner over `package-lock.json`            |
 | `startup-budget` | `scripts/startup-budget.mjs`: 150 ms median, 1 MB, no `@angular/compiler`             |
 | `build`          | the three builds, then `scripts/check-pack.mjs` over `dist/core`, `testing` and `cli` |
-| `e2e`            | `scripts/e2e.mjs` (needs `build`)                                                     |
+| `e2e`            | `scripts/e2e.mjs`                                                                     |
 | `parity`         | `node parity/run.mjs`                                                                 |
-| `pack-install`   | `scripts/pack-install.mjs` on Node 22 and 24, and on Node 22 with `@angular/core` 22.0.0 |
+| `pack-install`   | `scripts/pack-install.mjs` on Node 22.18.0 and 24, and on Node 22.18.0 with `@angular/core` 22.0.0 |
 
 `test` builds `dist/core` first because `build.spec.ts` packs it and reuses one that exists, so a
 stale build would test old code. `pack-install` installs the three tarballs into an empty folder,
