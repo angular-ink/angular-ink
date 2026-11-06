@@ -259,17 +259,23 @@ describe('writeFrame when the frame does not fit the screen', () => {
   const history = Array.from({ length: 7 }, (_, index) => `h${String(index + 1)}`);
   const lines = (prefix: string, count: number) =>
     Array.from({ length: count }, (_, index) => `${prefix}${String(index + 1)}`);
+  const fromFilled = { terminalRows: rows, previousEndsOnLastRow: true };
 
-  it('homes the cursor and erases down, never the whole screen or scrollback', () => {
-    const before = gridOf(lines('a', 3), 6);
-    const after = gridOf(lines('b', 8), 6);
-    const bytes = frame(before, after, { terminalRows: rows });
+  it('homes the cursor over a frame that filled the screen, and never erases the scrollback', () => {
+    const bytes = frame(gridOf(lines('a', 8), 6), gridOf(lines('b', 8), 6), fromFilled);
     expect(bytes.startsWith('\x1b[1;1H\x1b[J')).toBe(true);
     expect(bytes).not.toContain('\x1b[2J');
     expect(bytes).not.toContain('\x1b[3J');
   });
 
-  it('keeps the scrollback and leaves the last rows on the screen', async () => {
+  it('erases only its own rows when a short frame becomes too tall', () => {
+    const before = gridOf(lines('a', 3), 6);
+    const after = gridOf(lines('b', 8), 6);
+    const bytes = frame(before, after, { terminalRows: rows });
+    expect(bytes.startsWith('\x1b[3A\r\x1b[J')).toBe(true);
+  });
+
+  it('keeps the scrollback and shows the last rows, with no blank row below them', async () => {
     const before = gridOf(lines('a', 3), 6);
     const after = gridOf(lines('b', 8), 6);
     const screen = openScreen(6, rows);
@@ -279,7 +285,7 @@ describe('writeFrame when the frame does not fit the screen', () => {
     await screen.write(frame(null, before, { terminalRows: rows }));
     await screen.write(frame(before, after, { terminalRows: rows }));
     expect(screen.scrollback()).toEqual(expect.arrayContaining(scrolledBefore));
-    expect(screen.viewport()).toEqual(['b5', 'b6', 'b7', 'b8', '']);
+    expect(screen.viewport()).toEqual(['b4', 'b5', 'b6', 'b7', 'b8']);
   });
 
   it('leaves no ghost lines when the next frame is also taller', async () => {
@@ -287,8 +293,14 @@ describe('writeFrame when the frame does not fit the screen', () => {
     const second = gridOf(lines('b', 7), 6);
     const screen = openScreen(6, rows);
     await screen.write(frame(null, first, { terminalRows: rows }));
-    await screen.write(frame(first, second, { terminalRows: rows }));
-    expect(screen.viewport()).toEqual(['b4', 'b5', 'b6', 'b7', '']);
+    await screen.write(frame(first, second, fromFilled));
+    expect(screen.viewport()).toEqual(['b3', 'b4', 'b5', 'b6', 'b7']);
+  });
+
+  it('draws an overflowing frame again for a resize, even with no change', () => {
+    const tall = gridOf(lines('a', 8), 6);
+    expect(frame(tall, tall, fromFilled)).toBe('');
+    expect(frame(tall, tall, { ...fromFilled, resized: true })).toContain('a1');
   });
 
   it('redraws cleanly after the terminal shrinks under a frame', async () => {
@@ -297,8 +309,8 @@ describe('writeFrame when the frame does not fit the screen', () => {
     const screen = openScreen(6, 10);
     await screen.write('top\r\n' + frame(null, before));
     screen.resize(6, rows);
-    await screen.write(frame(before, after, { terminalRows: rows }));
-    expect(screen.viewport()).toEqual(['b3', 'b4', 'b5', 'b6', '']);
+    await screen.write(frame(before, after, { terminalRows: rows, previousTerminalRows: 10 }));
+    expect(screen.viewport()).toEqual(['b2', 'b3', 'b4', 'b5', 'b6']);
     expect(screen.scrollback()).toContain('top');
   });
 
@@ -307,9 +319,93 @@ describe('writeFrame when the frame does not fit the screen', () => {
     const short = gridOf(lines('b', 2), 6);
     const screen = openScreen(6, rows);
     await screen.write(frame(null, tall, { terminalRows: rows }));
-    await screen.write(frame(tall, short, { terminalRows: rows }));
+    await screen.write(frame(tall, short, fromFilled));
     expect(screen.viewport()).toEqual(['b1', 'b2', '', '', '']);
     expect(screen.cursor()).toEqual({ x: 0, y: 2 });
+  });
+});
+
+describe('writeFrame with a frame exactly as tall as the screen', () => {
+  const rows = 3;
+  const fromFilled = { terminalRows: rows, previousEndsOnLastRow: true };
+
+  it('loses no row: the cursor rests after the last cell, not on a row of its own', async () => {
+    const screen = openScreen(6, rows);
+    await screen.write(frame(null, gridOf(['a', 'b', 'cd'], 6), { terminalRows: rows }));
+    expect(screen.viewport()).toEqual(['a', 'b', 'cd']);
+    expect(screen.cursor()).toEqual({ x: 2, y: 2 });
+  });
+
+  it('writes the cells that changed and returns to the same place', async () => {
+    const before = gridOf(['a', 'b', 'cd'], 6);
+    const after = gridOf(['X', 'b', 'cd'], 6);
+    const screen = openScreen(6, rows);
+    await screen.write(frame(null, before, { terminalRows: rows }));
+    const bytes = frame(before, after, fromFilled);
+    expect(bytes).not.toContain('\x1b[J');
+    await screen.write(bytes);
+    expect(screen.viewport()).toEqual(['X', 'b', 'cd']);
+    expect(screen.cursor()).toEqual({ x: 2, y: 2 });
+    expect(screen.scrollback()).toEqual([]);
+  });
+
+  it('writes nothing for an identical frame', () => {
+    const grid = gridOf(['a', 'b', 'c'], 3);
+    expect(frame(grid, grid, fromFilled)).toBe('');
+  });
+
+  it('draws it again as the last frame of the app, from the top of the screen', async () => {
+    const grid = gridOf(['a', 'b', 'c'], 3);
+    const bytes = frame(grid, grid, { ...fromFilled, unmounting: true });
+    expect(bytes.startsWith('\x1b[1;1H\x1b[J')).toBe(true);
+    const screen = openScreen(3, rows);
+    await screen.write(frame(null, grid, { terminalRows: rows }));
+    await screen.write(bytes);
+    expect(screen.viewport()).toEqual(['a', 'b', 'c']);
+    expect(screen.cursor()).toEqual({ x: 1, y: 2 });
+  });
+
+  it('keeps what is above when a shorter frame grows to the height of the screen', async () => {
+    const before = gridOf(['a', 'b'], 6);
+    const after = gridOf(['a', 'b', 'c'], 6);
+    const screen = openScreen(6, rows);
+    await screen.write('top\r\n');
+    await screen.write(frame(null, before, { terminalRows: rows }));
+    await screen.write(frame(before, after, { terminalRows: rows }));
+    expect(screen.viewport()).toEqual(['a', 'b', 'c']);
+    expect(screen.scrollback()).toEqual(['top']);
+  });
+
+  it('leaves the cursor waiting to wrap when the last row is full', async () => {
+    const screen = openScreen(3, rows);
+    const full = gridOf(['a', 'b', 'xyz'], 3);
+    await screen.write(frame(null, full, { terminalRows: rows }));
+    await screen.write(frame(full, gridOf(['Z', 'b', 'xyz'], 3), fromFilled));
+    expect(screen.viewport()).toEqual(['Z', 'b', 'xyz']);
+    expect(screen.cursor()).toEqual({ x: 3, y: 2 });
+  });
+
+  it('stops after a wide last cell, whole', async () => {
+    const screen = openScreen(6, rows);
+    await screen.write(frame(null, gridOf(['a', 'b', 'x世'], 6), { terminalRows: rows }));
+    expect(screen.viewport()).toEqual(['a', 'b', 'x世']);
+    expect(screen.cursor()).toEqual({ x: 3, y: 2 });
+  });
+
+  it('rests on column 0 of an empty last row', async () => {
+    const screen = openScreen(6, rows);
+    await screen.write(frame(null, gridOf(['a', 'b', ''], 6), { terminalRows: rows }));
+    expect(screen.cursor()).toEqual({ x: 0, y: 2 });
+  });
+
+  it('goes back to resting below the frame once the screen is taller', async () => {
+    const before = gridOf(['a', 'b', 'c'], 6);
+    const after = gridOf(['X', 'b', 'c'], 6);
+    const screen = openScreen(6, 5);
+    await screen.write(frame(null, before, { terminalRows: rows }));
+    await screen.write(frame(before, after, { terminalRows: 5, previousEndsOnLastRow: true }));
+    expect(screen.viewport()).toEqual(['X', 'b', 'c', '', '']);
+    expect(screen.cursor()).toEqual({ x: 0, y: 3 });
   });
 });
 
@@ -363,6 +459,11 @@ describe('writeFrame colors', () => {
 });
 
 describe('eraseFrame', () => {
+  it('moves up one row less from the last row of a frame that filled the screen', () => {
+    expect(eraseFrame(3, true)).toBe('\x1b[2A\r\x1b[J');
+    expect(eraseFrame(1, true)).toBe('\r\x1b[J');
+  });
+
   it('erases the frame and rests where it started', async () => {
     const grid = gridOf(['one', 'two', 'three'], 8);
     const screen = openScreen(8, 6);

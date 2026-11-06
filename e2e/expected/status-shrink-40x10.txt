@@ -1,3 +1,4 @@
+╭──────────────────────────────────────╮
 │ Service         │ State    │ Latency │
 │ api-gateway     │ ok       │   42 ms │
 │ billing         │ ok       │   87 ms │

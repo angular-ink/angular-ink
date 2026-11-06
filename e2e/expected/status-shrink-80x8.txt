@@ -1,3 +1,4 @@
+│ api-gateway                                │ eu-west    │ ok       │   42 ms │
 │ billing                                    │ eu-west    │ ok       │   87 ms │
 │ catalog                                    │ us-east    │ degraded │  640 ms │
 │ notifications                              │ us-east    │ ok       │   55 ms │

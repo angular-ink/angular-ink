@@ -229,3 +229,42 @@ describe('takeStaticOutput', () => {
     expect(takeStaticOutput(withLayer(3), 0)).toBe('a\n\n\n');
   });
 });
+
+describe('FrameLog with a frame as tall as the screen', () => {
+  it('erases for text from its last row, where the cursor rests', async () => {
+    const log = newLog(3);
+    const screen = openScreen(10, 3);
+    await screen.write(log.frame(grid(10, 'a', 'b', 'c')));
+    await screen.write(`${log.beginText()}text\r\n${log.endText()}`);
+    expect(screen.viewport()).toEqual(['a', 'b', 'c']);
+    expect(screen.terminal.buffer.active.getLine(0)?.translateToString(true).trim()).toBe('text');
+  });
+
+  it('erases from its last row for clear', async () => {
+    const log = newLog(3);
+    const screen = openScreen(10, 5);
+    await screen.write('kept\r\n');
+    await screen.write(log.frame(grid(10, 'a', 'b', 'c')));
+    await screen.write(log.clear());
+    expect(screen.viewport()).toEqual(['kept']);
+  });
+
+  it('draws it again when the terminal lost rows, even with no change', () => {
+    let rows = 4;
+    const log = new FrameLog({ level: 0, synchronized: false, terminalRows: () => rows });
+    const frame = grid(10, 'a', 'b', 'c');
+    log.frame(frame);
+    expect(log.frame(frame)).toBe('');
+    rows = 3;
+    expect(log.frame(frame)).toContain('\x1b[1;1H\x1b[J');
+    expect(log.frame(frame)).toBe('');
+  });
+
+  it('draws it again as the last frame, and not otherwise', () => {
+    const log = newLog(3);
+    const frame = grid(10, 'a', 'b', 'c');
+    log.frame(frame);
+    expect(log.frame(frame)).toBe('');
+    expect(log.frame(frame, { unmounting: true })).toContain('\x1b[1;1H\x1b[J');
+  });
+});

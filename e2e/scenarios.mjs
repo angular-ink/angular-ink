@@ -144,10 +144,11 @@ export function createScenarios(bundles, folder) {
     check: ({ exitCode, history }) => {
       assert.equal(exitCode, 0);
       assertNumbersKept(history, 30);
-      // What the resize itself pushed up, and the one redraw. Nothing can take either back.
+      // What the resize itself pushed up, the redraw for the new size and, for a frame that fills the
+      // screen, the last redraw as the app ends, as in Ink. Nothing can take these back.
       const copies = history.split('\n').filter((line) => line.startsWith('╭')).length;
       assert.ok(
-        copies <= 2,
+        copies <= 3,
         `${String(copies)} copies of the frame in the scrollback:\n${history}`,
       );
     },

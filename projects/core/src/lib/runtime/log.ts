@@ -10,6 +10,7 @@ import {
   SYNC_BEGIN,
   SYNC_END,
   writeFrame,
+  type WriteOptions,
 } from '../engine/writer';
 
 export interface FrameLogOptions {
@@ -17,6 +18,9 @@ export interface FrameLogOptions {
   readonly synchronized: boolean;
   readonly terminalRows: () => number;
 }
+
+/** Why a frame is drawn, when it is not simply that something changed. */
+export type FrameMoment = Pick<WriteOptions, 'resized' | 'unmounting'>;
 
 /**
  * Turns frames into bytes while it keeps the previous grid, the only state between frames, and
@@ -29,6 +33,9 @@ export class FrameLog {
   private pendingErase = '';
   /** Text is erasing a frame for a size it no longer fits, so the next frame draws instead. */
   private skipRedraw = false;
+  /** The frame on the screen filled it, so the cursor rests on its last row and not below it. */
+  private endsOnLastRow = false;
+  private lastTerminalRows: number | null = null;
 
   constructor(private readonly options: FrameLogOptions) {}
 
@@ -37,14 +44,17 @@ export class FrameLog {
     return this.onScreen && this.previous !== null ? this.previous.rows : 0;
   }
 
-  frame(next: CellGrid): string {
+  frame(next: CellGrid, moment: FrameMoment = {}): string {
     const erase = this.pendingErase;
     const from = this.onScreen ? this.previous : null;
     this.pendingErase = '';
     this.previous = next;
     this.onScreen = true;
-    if (erase === '') return writeFrame(from, next, this.writeOptions(this.options.synchronized));
-    return this.synchronized(erase + writeFrame(null, next, this.writeOptions(false)));
+    const options = { ...this.writeOptions(this.options.synchronized), ...moment };
+    if (erase !== '') {
+      return this.synchronized(erase + this.write(null, next, { ...options, synchronized: false }));
+    }
+    return this.write(from, next, options);
   }
 
   /** Bytes that take the frame off the screen, before text from outside goes where it was. */
@@ -63,7 +73,7 @@ export class FrameLog {
     }
     this.onScreen = true;
     // A line feed from the text need not have reset the column, and the frame starts from column 0.
-    return `\r${writeFrame(null, this.previous, this.writeOptions(false))}${this.syncEnd()}`;
+    return `\r${this.write(null, this.previous, this.writeOptions(false))}${this.syncEnd()}`;
   }
 
   clear(): string {
@@ -76,7 +86,7 @@ export class FrameLog {
    */
   invalidate(columns: number): void {
     if (!this.onScreen || this.previous === null) return;
-    this.pendingErase = eraseFrame(reflowedHeight(this.previous, columns));
+    this.pendingErase = eraseFrame(reflowedHeight(this.previous, columns), this.endsOnLastRow);
     this.onScreen = false;
   }
 
@@ -88,16 +98,31 @@ export class FrameLog {
     return diffGrids(previous, next).length === 0;
   }
 
+  private write(from: CellGrid | null, next: CellGrid, options: WriteOptions): string {
+    const bytes = writeFrame(from, next, options);
+    if (bytes !== '') this.endsOnLastRow = next.rows >= options.terminalRows;
+    return bytes;
+  }
+
   private takeErase(): string {
-    const erase = this.pendingErase || eraseFrame(this.height);
+    const erase = this.pendingErase || eraseFrame(this.height, this.endsOnLastRow);
     this.pendingErase = '';
     this.onScreen = false;
     return erase;
   }
 
-  private writeOptions(synchronized: boolean) {
-    const { level, terminalRows } = this.options;
-    return { level, synchronized, terminalRows: terminalRows() };
+  /** Options for one write, which also records where that write leaves the cursor. */
+  private writeOptions(synchronized: boolean): WriteOptions {
+    const terminalRows = this.options.terminalRows();
+    const options = {
+      level: this.options.level,
+      synchronized,
+      terminalRows,
+      previousTerminalRows: this.lastTerminalRows ?? terminalRows,
+      previousEndsOnLastRow: this.endsOnLastRow,
+    };
+    this.lastTerminalRows = terminalRows;
+    return options;
   }
 
   private synchronized(bytes: string): string {

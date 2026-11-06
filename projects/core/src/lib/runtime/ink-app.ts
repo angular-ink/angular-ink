@@ -20,7 +20,7 @@ import { paintErrorOverview } from './error-overview';
 import { installExitHooks } from './exit-hooks';
 import { FrameScheduler } from './frame-scheduler';
 import { InkRuntime, type WindowSize } from './inject';
-import { FrameLog, frameText, staticText, takeStaticOutput } from './log';
+import { FrameLog, frameText, staticText, takeStaticOutput, type FrameMoment } from './log';
 import { createStreamPort, type StreamPort } from './terminal-port';
 
 const HIDE_CURSOR = '\x1b[?25l';
@@ -108,6 +108,7 @@ export class InkApp implements InkRuntime {
   private stopResizing: (() => void) | null = null;
   private removeExitHooks: (() => void) | null = null;
   private beforeExit: (() => void) | null = null;
+  private hasWrittenStatic = false;
 
   constructor(private readonly options: InkAppOptions) {
     this.stdout = options.stdout;
@@ -446,7 +447,10 @@ export class InkApp implements InkRuntime {
       const layout = layoutTree(tree.root, this.port.columns, this.options.yoga);
       if (this.options.frameSink === undefined) {
         const output = takeStaticOutput(layout, this.level);
-        if (output !== null) this.writeStdout(output);
+        if (output !== null) {
+          this.hasWrittenStatic = true;
+          this.writeStdout(output);
+        }
         return;
       }
       const grid = paintStatic(layout);
@@ -480,7 +484,7 @@ export class InkApp implements InkRuntime {
     if (this.phase === 'running') this.scheduler.request();
   }
 
-  private drawFrame(): void {
+  private drawFrame(moment?: FrameMoment): void {
     if (this.phase !== 'running' || this.crash !== null || this.portClosed) return;
     if (this.writing) {
       // Layout waits too: when the write ends, the frame shows the newest state, once.
@@ -488,7 +492,7 @@ export class InkApp implements InkRuntime {
       return;
     }
     const grid = this.paint();
-    if (grid !== null) this.show(grid);
+    if (grid !== null) this.show(grid, moment);
   }
 
   private paint(): CellGrid | null {
@@ -502,11 +506,11 @@ export class InkApp implements InkRuntime {
     }
   }
 
-  private show(grid: CellGrid): void {
+  private show(grid: CellGrid, moment?: FrameMoment): void {
     if (this.options.frameSink !== undefined) {
       this.options.frameSink(grid);
     } else if (this.drawsInPlace) {
-      const bytes = this.log.frame(grid);
+      const bytes = this.log.frame(grid, moment);
       if (bytes !== '') this.send(bytes);
     } else {
       this.lastGrid = grid;
@@ -527,13 +531,19 @@ export class InkApp implements InkRuntime {
   }
 
   private drawFinalFrame(): void {
+    const unmounting = this.lastFrameRedraws();
     this.commitQueued = false;
     if (this.crash === null) this.runChangeDetection();
     let grid = this.crash === null ? this.paint() : null;
     if (this.crash !== null) grid = this.paintOverview(this.crash);
     if (grid === null) return;
     if (this.drawsInPlace && this.log.isClearedFrame(grid)) return;
-    this.show(grid);
+    this.show(grid, { unmounting });
+  }
+
+  // After static output Ink draws a last frame only if one is pending, or static rows would repeat.
+  private lastFrameRedraws(): boolean {
+    return !this.hasWrittenStatic || this.commitQueued || this.scheduler.pending;
   }
 
   private paintOverview(error: Error): CellGrid | null {
@@ -550,13 +560,12 @@ export class InkApp implements InkRuntime {
     const rows = this.port.rows;
     const old = this.size();
     if (columns === old.columns && rows === old.rows) return;
-    const cut = rows < old.rows && this.log.height >= rows;
-    if (this.drawsInPlace && (columns < old.columns || cut)) this.log.invalidate(columns);
+    if (this.drawsInPlace && columns < old.columns) this.log.invalidate(columns);
     this.size.set({ columns, rows });
     // The app reads the size too. A frame ahead of it would land in the scrollback when it overflows.
     this.runChangeDetection();
     this.commitQueued = false;
-    this.drawFrame();
+    this.drawFrame({ resized: true });
   }
 
   /**

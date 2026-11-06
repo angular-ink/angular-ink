@@ -17,16 +17,25 @@ export interface WriteOptions {
   readonly level: ColorLevel;
   /** Wrap the output in a synchronized update, so the terminal paints it at once. */
   readonly synchronized: boolean;
+  /** Height of the screen when `previous` was drawn, if it has changed since. */
+  readonly previousTerminalRows?: number;
+  /** The cursor rests on the last row of `previous`, as `previous` filled the screen then. */
+  readonly previousEndsOnLastRow?: boolean;
+  /** The terminal changed size. A frame that overflows is drawn again even with no change. */
+  readonly resized?: boolean;
+  /** This is the last frame of the app. One that fills the screen is drawn again. */
+  readonly unmounting?: boolean;
 }
 
 /**
  * The bytes that turn what `previous` put on the terminal into `next`, or `''` when nothing
- * differs. The cursor starts and ends on column 0 of the row after the last row of the frame.
- * Moves are relative to that rest position, because an inline app does not know its absolute row.
+ * differs. Moves are relative to where the cursor rests, because an inline app does not know its
+ * absolute row. It rests on column 0 of the row after the frame or, when the frame fills the screen
+ * and that row would scroll it, just after the last cell of the frame.
  *
- * When the old or the new frame fills the screen, rows have scrolled out of reach of a relative
- * move. Then the cursor goes home, the screen is erased down and the frame is drawn again; the
- * scrollback is never erased.
+ * The rules for what can be drawn over follow Ink 8.0.0. A frame that overflows the screen is out of
+ * reach of relative moves, so it is erased from the top of the screen and drawn again in full, which
+ * sends a copy of its top rows to the scrollback. The scrollback itself is never erased.
  */
 export function writeFrame(
   previous: CellGrid | null,
@@ -38,27 +47,40 @@ export function writeFrame(
 }
 
 /** Erases a frame of `height` rows and leaves the cursor where the frame began. */
-export function eraseFrame(height: number): string {
-  return height <= 0 ? '' : `${moveUp(height)}\r${ERASE_DOWN}`;
+export function eraseFrame(height: number, endsOnLastRow = false): string {
+  if (height <= 0) return '';
+  const above = endsOnLastRow ? height - 1 : height;
+  return `${above > 0 ? moveUp(above) : ''}\r${ERASE_DOWN}`;
 }
 
 function frameBytes(previous: CellGrid | null, next: CellGrid, options: WriteOptions): string {
   let runs = diffGrids(previous, next);
+  const { terminalRows } = options;
+  const shrunk = (options.previousTerminalRows ?? terminalRows) > terminalRows;
+  const fills = next.rows >= terminalRows;
+  const filled = previous !== null && previous.rows >= terminalRows;
+  const overflows = previous !== null && (previous.rows > terminalRows || next.rows > terminalRows);
+  const redraw =
+    overflows || (filled && (next.rows < terminalRows || shrunk || options.unmounting === true));
+
   const sameSize =
     previous !== null && previous.columns === next.columns && previous.rows === next.rows;
-  if (sameSize && runs.length === 0) return '';
+  const forced = shrunk || options.resized === true || options.unmounting === true;
+  if (sameSize && runs.length === 0 && !(redraw && forced)) return '';
 
-  const { terminalRows } = options;
-  const pen = new Pen(options.level, previous?.rows ?? 0);
+  const endsOnLastRow = previous !== null && options.previousEndsOnLastRow === true;
+  const height = previous?.rows ?? 0;
+  const restRow = endsOnLastRow ? height - 1 : height;
+  const pen = new Pen(options.level, restRow, endsOnLastRow ? -1 : 0);
   let eraseTail = false;
-  if (previous !== null && (previous.rows >= terminalRows || next.rows >= terminalRows)) {
-    // The cursor is somewhere below the screen top; home is the only place that is known.
+  if (redraw && filled) {
+    // The frame is all there is on the screen, so home erases exactly that.
     pen.out += HOME + ERASE_DOWN;
     pen.start(0, terminalRows - 1);
     runs = diffGrids(null, next);
-  } else if (previous !== null && previous.columns !== next.columns) {
-    pen.out += eraseFrame(previous.rows);
-    pen.start(0, previous.rows);
+  } else if (redraw || (previous !== null && previous.columns !== next.columns)) {
+    pen.out += eraseFrame(height, endsOnLastRow);
+    pen.start(0, restRow);
     runs = diffGrids(null, next);
   } else {
     eraseTail = previous !== null && next.rows < previous.rows;
@@ -82,6 +104,10 @@ function frameBytes(previous: CellGrid | null, next: CellGrid, options: WriteOpt
       pen.moveToColumn(occupied);
       pen.eraseLineEnd();
     }
+  }
+  if (fills) {
+    pen.restAfterLastCell(next);
+    return pen.out;
   }
   pen.moveToRow(next.rows);
   // The reset comes first: an erase paints with the open background.
@@ -117,9 +143,11 @@ class Pen {
   constructor(
     private readonly level: ColorLevel,
     restRow: number,
+    restColumn: number,
   ) {
     this.row = restRow;
     this.lastRow = restRow;
+    this.column = restColumn;
   }
 
   start(row: number, lastRow: number): void {
@@ -166,6 +194,34 @@ class Pen {
     const end = this.column + cells.length;
     // At the last column the terminal waits to wrap, so the column is unknown.
     this.column = end >= columns ? -1 : end;
+  }
+
+  /**
+   * Writes the last cell of the frame again. Only that leaves the cursor as a terminal has it after
+   * a whole frame, which at the last column is still waiting to wrap.
+   */
+  restAfterLastCell(grid: CellGrid): void {
+    const y = grid.rows - 1;
+    this.moveToRow(y);
+    const end = occupiedColumns(grid, y);
+    if (end === 0) {
+      this.resetStyle();
+      this.moveToColumn(0);
+      return;
+    }
+    const start = y * grid.columns;
+    // The second cell of a wide character holds ''.
+    const x = grid.chars[start + end - 1] === '' ? end - 2 : end - 1;
+    const cells = [];
+    for (let i = x; i < end; i++) {
+      cells.push({
+        char: grid.chars[start + i] ?? ' ',
+        style: grid.styles[start + i] ?? PLAIN_STYLE,
+      });
+    }
+    this.moveToColumn(x);
+    this.draw(cells, grid.columns);
+    this.resetStyle();
   }
 
   eraseLineEnd(): void {
