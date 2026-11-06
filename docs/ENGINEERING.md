@@ -116,7 +116,44 @@ Look for flicker, and for misaligned borders or columns.
 
 - **pre-commit (`husky` + `lint-staged`):** Prettier and ESLint `--fix` on staged files.
 - **commit-msg (`commitlint`):** checks the message follows Conventional Commits.
+- `npm install` runs `husky` through the `prepare` script, which sets `core.hooksPath` to
+  `.husky/_`. `prepare` ends in `|| true`, so an install without Git (a container with no `git`,
+  or `--ignore-scripts` in CI) does not fail, and then no hook is active. After a fresh clone,
+  check with `git config core.hooksPath`; if it prints nothing, run `npx husky` once.
+- The hooks call `npx --no-install`, so they need `node_modules` and a Node on the `PATH` of
+  the shell that runs `git commit`.
 - CI runs the same checks, so skipping a hook only delays the failure.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every pull request and every push to `main`. Each job below is
+required for merging (a repository setting, listed in `CONTRIBUTING.md`):
+
+| Job              | What it runs                                                                          |
+| ---------------- | ------------------------------------------------------------------------------------- |
+| `format`         | `prettier --check .`                                                                  |
+| `lint`           | `eslint .` after `build:core`, and `scripts/check-readme.mjs`                         |
+| `typecheck`      | `npm run typecheck`                                                                   |
+| `test`           | `build:core`, then `vitest run --coverage` with the gates above                       |
+| `audit`          | `npm audit --omit=dev --audit-level=high` (advisory: OSV-Scanner is the gate)         |
+| `osv-scanner`    | `scripts/check-osv-ignores.mjs`, then OSV-Scanner over `package-lock.json`            |
+| `startup-budget` | `scripts/startup-budget.mjs`: 150 ms median, 1 MB, no `@angular/compiler`             |
+| `build`          | the three builds, then `scripts/check-pack.mjs` over `dist/core`, `testing` and `cli` |
+| `e2e`            | `scripts/e2e.mjs` (needs `build`)                                                     |
+| `parity`         | `node parity/run.mjs`                                                                 |
+| `pack-install`   | `scripts/pack-install.mjs` on Node 22 and 24, and on Node 22 with `@angular/core` 22.0.0 |
+
+`test` builds `dist/core` first because `build.spec.ts` packs it and reuses one that exists, so a
+stale build would test old code. `pack-install` installs the three tarballs into an empty folder,
+builds a hello app with `angular-ink build` and checks its output. The Angular 22.0.0 run is there
+because `ɵINJECTOR_SCOPE` is private and the peer range starts at 22.0.0.
+
+Other workflows: `codeql.yml` (CodeQL, `security-extended`), `scorecard.yml` (OpenSSF Scorecard),
+`weekly.yml` (OSV-Scanner, StrykerJS over `engine/`, with a break threshold of 80, and a check of
+the `ink` version on npm that opens an issue when it is newer than the pinned one) and
+`release.yml`. Third-party actions are pinned to a full commit SHA with the version in a comment,
+every workflow sets `permissions: contents: read` and a job raises only what it needs, every job
+has `timeout-minutes`, and no workflow uses `pull_request_target`.
 
 ## Security
 
@@ -124,7 +161,12 @@ Look for flicker, and for misaligned borders or columns.
   stdin are untrusted. The engine must not let them move the cursor, change the terminal's mode or
   run a sequence of the user's choice. The limits in `AGENTS.md` bound the work they can cause.
 - **Dependencies:** a new runtime dependency must pass `npm audit` and OSV-Scanner. Fix
-  vulnerabilities within the CVSS deadlines the maintainer sets in the repository's security policy.
+  vulnerabilities within the CVSS deadlines in `SECURITY.md`.
+- **Ignoring an advisory:** only when it cannot reach angular-ink. Add it to `osv-scanner.toml`
+  with an `id`, a `reason` and an `ignoreUntil` at most 90 days ahead; `scripts/check-osv-ignores.mjs`
+  fails CI otherwise. The list is empty today. A dev-tool advisory with a fix is fixed through an
+  `overrides` entry in `package.json` (`minimatch` and `qs` are), and the override goes when the
+  tool ships the fix itself.
 - **Terminal safety:** the process-exit tests (signals, uncaught errors, closed stdout) are part of
   the gate once the runtime exists.
 
@@ -133,4 +175,14 @@ Look for flicker, and for misaligned borders or columns.
 - The three packages share one version, kept in step with changesets (`fixed`).
 - `VERSION` in `projects/core/src/version.ts` is rewritten from `projects/core/package.json` when
   the version is bumped.
+- `.changeset/config.json` has the three packages in one `fixed` group, so a changeset for any of
+  them bumps all three. A pull request that changes a published package adds a changeset.
+- `release.yml` opens the "chore: version packages" pull request from the changesets
+  (`npm run changeset:version` also runs `scripts/sync-version.mjs` and refreshes the lockfile).
+  Merging it publishes `@angular-ink/core`, `@angular-ink/testing` and `angular-ink` with npm
+  trusted publishing and provenance, then creates the GitHub release with a CycloneDX SBOM.
+- `engines.node` of `angular-ink` (the command) is `^22.18.0 || >=24.11.0`, the range of Babel 8,
+  which it depends on. The two libraries accept Node `>=22`.
 - Publishing is a maintainer step. Nothing is pushed or published without the maintainer's review.
+  The one-time setup (branch protection, secrets, trusted publishers, the first-release token) is
+  the checklist at the end of `CONTRIBUTING.md`.

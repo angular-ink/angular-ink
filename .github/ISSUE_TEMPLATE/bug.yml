@@ -1,0 +1,57 @@
+name: Bug report
+description: A terminal app renders wrong, throws, leaves the terminal in a bad state, or does not match the README.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. A small component that shows the problem is the fastest way to a fix.
+        Questions are welcome in [Discussions](https://github.com/angular-ink/angular-ink/discussions); security issues go to [private reporting](https://github.com/angular-ink/angular-ink/security/advisories/new).
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: What you see, and the exact error message if there is one.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: If the README or the behaviour of Ink 8.0.0 says otherwise, link or quote it.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: The smallest component and render call that show it. A repository link works too.
+      render: ts
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: '@angular-ink/core version'
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: angular
+    attributes:
+      label: Angular version
+      placeholder: 22.2.0
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node version
+      placeholder: 24.11.0
+    validations:
+      required: true
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal and OS
+      placeholder: GNOME Terminal 3.52 on Ubuntu 24.04

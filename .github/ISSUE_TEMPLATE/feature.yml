@@ -1,0 +1,25 @@
+name: Feature request
+description: Something angular-ink should do that it does not do yet.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the [v0.1 limits](https://github.com/angular-ink/angular-ink#v01-limits) and the roadmap first: it may already be planned. For an open-ended idea, [Discussions](https://github.com/angular-ink/angular-ink/discussions/categories/ideas) is a good place to start.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The terminal app you are trying to make
+      description: What you need to build, and where angular-ink gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+      description: The element, input or function you have in mind, and the Ink 8.0.0 equivalent if there is one.
+  - type: textarea
+    id: workaround
+    attributes:
+      label: What you do today
+      description: Any workaround, or the library you use instead.

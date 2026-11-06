@@ -10,6 +10,13 @@ function setup() {
 }
 
 describe('InkRendererFactory', () => {
+  it('gives an element the tagName Angular 22.0 reads from a host element', () => {
+    const { r } = setup();
+    const box = r.createElement('ink-box') as InkNode;
+    expect((box as unknown as { tagName: string }).tagName).toBe('ink-box');
+    expect(Object.keys(box)).not.toContain('tagName');
+  });
+
   it('keeps children in DOM order across append, insertBefore and remove', () => {
     const { r } = setup();
     const p = r.createElement('ink-box') as InkNode;

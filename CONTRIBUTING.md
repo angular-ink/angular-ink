@@ -1,0 +1,133 @@
+# Contributing to angular-ink
+
+Read `AGENTS.md` for the rules of the code base, and `docs/ARCHITECTURE.md` and
+`docs/ENGINEERING.md` for the structure, tests, CI, security and releases.
+
+## Setup
+
+All toolchains run in Docker through `scripts/dev` (Node 24, 6 GB memory cap). Nothing is
+installed on your machine except Docker and, for the end-to-end and parity scripts, Node from nvm.
+
+```sh
+./scripts/dev npm ci
+```
+
+## The gate
+
+Run these before you open a pull request. CI runs the same checks.
+
+```sh
+./scripts/dev npm run format:check
+./scripts/dev npm run lint
+./scripts/dev npm run typecheck
+./scripts/dev npm run build:core           # the tests pack dist/core, so build it first
+./scripts/dev npm run test:coverage        # coverage gates in docs/ENGINEERING.md
+./scripts/dev node scripts/startup-budget.mjs
+./scripts/dev node scripts/e2e.mjs         # when the change affects the output
+./scripts/dev node parity/run.mjs          # when the change affects the output
+```
+
+Mutation testing of the engine runs weekly in CI. To check that it runs locally, use the full
+Node image, because StrykerJS needs `ps`:
+
+```sh
+NGINK_IMAGE=node:24-bookworm ./scripts/dev npx stryker run --dryRunOnly
+```
+
+## Where to start
+
+- Issues labelled [`good first issue`](https://github.com/angular-ink/angular-ink/labels/good%20first%20issue) are small and say where to look; [`help wanted`](https://github.com/angular-ink/angular-ink/labels/help%20wanted) ones are bigger.
+- Questions, ideas and things you built go to [Discussions](https://github.com/angular-ink/angular-ink/discussions).
+
+## Before you open a pull request
+
+- **Claim the issue first.** Comment on it saying you'd like to work on it, and wait for a maintainer to reply that it's yours. That way two people never do the same work, and everyone gets a fair turn.
+- **At most two claimed issues per person at a time.** Once one is merged or closed, claim another. A claim with no pull request after seven days is released, so others can take it.
+- **New features need an issue before any code.** Open a [feature request](https://github.com/angular-ink/angular-ink/issues/new?template=feature.yml) and wait until the design is agreed in it. A feature pull request without an agreed issue will be closed, however good the code, because the design discussion belongs in the issue.
+- **Bug fixes** go through the same steps: open an issue with a reproduction (or claim an existing one), then send the fix. A typo or a broken link in the docs can go straight to a pull request.
+- Link the issue in the pull request description (`Closes #123`).
+
+## Test first
+
+Write the test first and watch it fail. A test that passes without the change it covers guards
+nothing: revert the change and check that the test fails.
+
+## Changesets
+
+A pull request that changes a published package adds a changeset:
+
+```sh
+NGINK_IMAGE=node:24-bookworm ./scripts/dev npm run changeset
+```
+
+(The full Node image, because changesets reads Git and the slim image has no `git`.)
+
+The three packages share one version, so one changeset names any of them and all three are bumped together. Choose the bump (`patch`, `minor` or `major`; under `0.x` a minor may break) and describe the change
+for users. Commit the generated file in `.changeset/`. When changesets reach `main`, a bot opens a
+"chore: version packages" pull request that updates the version and `CHANGELOG.md`. Merging it
+publishes the release.
+
+If the version pull request shows no checks (a pull request opened with `GITHUB_TOKEN` triggers no
+workflows), close and reopen it, or push an empty commit to its branch
+(`git commit --allow-empty -m "chore: trigger ci"`), so the required checks run. Setting
+`RELEASE_BOT_TOKEN` (below) avoids this.
+
+## Review
+
+[CodeRabbit](https://coderabbit.ai) reviews every pull request against the rules in `AGENTS.md`.
+It requests changes on what it finds and approves once its comments are resolved. Answer its
+comments in the thread: reply with a fix, or explain why not and it will resolve the comment.
+CI must be green before merging.
+
+## Credits
+
+Everyone who contributes is listed in the README, following
+[all-contributors](https://allcontributors.org). After a pull request is merged, comment on it:
+`@all-contributors please add @<user> for code` (or `doc`, `bug`, `ideas`, `test`, and so on). The
+bot opens a pull request that updates `.all-contributorsrc` and the README.
+
+## Commits
+
+Use [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `docs:`,
+`test:`, `refactor:`, `perf:`, `ci:`, `chore:`. A scope is welcome, for example `fix(core): ...`.
+`commitlint` checks the message in a Git hook.
+
+## Dependency ignores
+
+If an advisory does not affect angular-ink, add it to `osv-scanner.toml` with an `id`, a `reason` and an
+`ignoreUntil` date at most 90 days ahead. `scripts/check-osv-ignores.mjs` fails CI otherwise.
+
+## Security
+
+Report vulnerabilities privately. See `SECURITY.md`.
+
+## Repository setup (maintainer)
+
+Done by hand in GitHub and npm. Nothing in the workflows sets these.
+
+- [ ] Protect `main`: require a pull request, require the CI jobs (`format`, `lint`, `typecheck`,
+      `test`, `audit`, `osv-scanner`, `startup-budget`, `build`, `e2e`, `parity`, `pack-install`) and the CodeQL check, require
+      the branch to be up to date, block force pushes.
+- [ ] Add a code scanning rule that fails a pull request on an alert of high severity or above.
+- [ ] Enable private vulnerability reporting (Settings, Code security).
+- [ ] Enable secret scanning and push protection.
+- [ ] Enable Dependabot alerts and Dependabot security updates.
+- [ ] Require 2FA in the GitHub org `angular-ink` and in the npm org `angular-ink`.
+- [ ] On npm, add the GitHub repository `angular-ink/angular-ink` and the workflow `release.yml` as a
+      trusted publisher of `angular-ink`, which exists already, and of `@angular-ink/core` and
+      `@angular-ink/testing` once they exist (next item).
+- [ ] First release only. npm takes a trusted publisher only for a package that exists, so
+      `@angular-ink/core` and `@angular-ink/testing` are published from the workflow with a
+      short-lived token (`angular-ink` can use its trusted publisher from the start):
+  1. Create a granular npm access token with read and write on the `@angular-ink` scope and on
+     `angular-ink`, with a 7-day expiry, and save it as the repository secret `NPM_TOKEN`.
+  2. Push or rerun the release workflow. The `publish` job publishes the three packages with
+     provenance.
+  3. Add the trusted publisher to the two new packages (above), delete the `NPM_TOKEN` secret and
+     revoke the token on npm. Later versions publish through OIDC only.
+- [ ] Create the repository secret `RELEASE_BOT_TOKEN`: a GitHub App installation token or a
+      fine-grained PAT limited to this repository with contents and pull-requests write. Only the
+      `release-pr` job reads it. Without it the job falls back to `GITHUB_TOKEN`, and the version
+      pull request gets no checks until you close and reopen it.
+- [ ] In Settings, Actions, allow GitHub Actions to create pull requests, so the release workflow
+      can open the "chore: version packages" pull request.

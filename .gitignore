@@ -7,3 +7,5 @@ coverage/
 out-tsc/
 .husky/_
 *.tsbuildinfo
+.stryker-tmp/
+reports/

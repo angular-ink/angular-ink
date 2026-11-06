@@ -3,7 +3,11 @@
 Test helpers for [`@angular-ink/core`](https://github.com/angular-ink/angular-ink): a virtual
 terminal, rendering to a string and simulated key presses.
 
-**Status:** in development. This version has no functionality yet.
+```ts
+import { renderForTest } from '@angular-ink/testing';
+```
+
+`renderForTest` renders a component on a virtual terminal and returns the frames as text.
 
 Not an official Angular project.
 
