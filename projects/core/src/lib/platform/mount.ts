@@ -1,5 +1,6 @@
 import {
   ApplicationRef,
+  type ComponentRef,
   DOCUMENT,
   ErrorHandler,
   Injector,
@@ -64,36 +65,43 @@ export function mountTree<T>(component: Type<T>, options: MountOptions): Mounted
     ],
     Injector.NULL as EnvironmentInjector,
   );
+  let ref: ComponentRef<T> | undefined;
   try {
     const root = factory.createRenderer(null, null).createElement('ink-root') as InkNode;
     const appRef = injector.get(ApplicationRef);
-    const ref = createComponent(component, {
+    const created = createComponent(component, {
       environmentInjector: injector,
       hostElement: root as unknown as Element,
     });
-    for (const [name, value] of Object.entries(options.inputs ?? {})) ref.setInput(name, value);
-    appRef.attachView(ref.hostView);
+    ref = created;
+    for (const [name, value] of Object.entries(options.inputs ?? {})) created.setInput(name, value);
+    appRef.attachView(created.hostView);
     let destroyed = false;
     return {
       root,
       injector,
       setInput: (name, value) => {
-        ref.setInput(name, value);
+        created.setInput(name, value);
       },
       whenStable: () => appRef.whenStable(),
       destroy: () => {
         if (destroyed) return;
         destroyed = true;
         try {
-          appRef.detachView(ref.hostView);
-          ref.destroy();
+          appRef.detachView(created.hostView);
+          created.destroy();
         } finally {
           injector.destroy();
         }
       },
     };
   } catch (error) {
-    injector.destroy();
+    // A failed mount still tears down what it made, so ngOnDestroy runs.
+    try {
+      ref?.destroy();
+    } finally {
+      injector.destroy();
+    }
     throw error;
   }
 }

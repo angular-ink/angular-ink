@@ -2,6 +2,7 @@ import {
   Component,
   DestroyRef,
   Injectable,
+  Input,
   InjectionToken,
   PLATFORM_ID,
   computed,
@@ -120,10 +121,19 @@ describe('mountTree', () => {
     tree.destroy();
   });
 
-  it('keeps warn-once state per mount', () => {
-    const first = mount(CounterApp);
-    const second = mount(CounterApp);
-    expect(first.warn).not.toBe(second.warn);
+  it('keeps warn-once state per mount', async () => {
+    @Component({
+      selector: 'ink-test-styled',
+      imports: [InkText],
+      template: `<ink-text [style.color]="'red'" [class.x]="true">hi</ink-text>`,
+    })
+    class Styled {}
+    const first = mount(Styled);
+    const second = mount(Styled);
+    await Promise.all([first.tree.whenStable(), second.tree.whenStable()]);
+    for (const { warn } of [first, second]) {
+      expect(warn).toHaveBeenCalledTimes(2); // one for style, one for class
+    }
     first.tree.destroy();
     second.tree.destroy();
   });
@@ -146,6 +156,21 @@ describe('mountTree', () => {
     }).toThrow('boom');
     expect(seen).toEqual(['ngOnDestroy']);
     expect(injectorDestroyed).toHaveBeenCalledTimes(1);
+  });
+
+  it('destroys the component when the mount fails after creating it', () => {
+    const destroyed = vi.fn();
+    @Component({ selector: 'ink-test-cleanup', template: '' })
+    class Cleanup implements OnDestroy {
+      @Input() set bad(_value: unknown) {
+        throw new Error('bad input');
+      }
+      ngOnDestroy(): void {
+        destroyed();
+      }
+    }
+    expect(() => mount(Cleanup, { inputs: { bad: 1 } })).toThrow('bad input');
+    expect(destroyed).toHaveBeenCalledTimes(1);
   });
 
   it('exposes the MountedTree shape', () => {
