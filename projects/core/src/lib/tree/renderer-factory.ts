@@ -100,7 +100,8 @@ class InkRenderer implements Renderer2 {
   }
 
   // Angular calls this for every template listener, component outputs included, and it cannot be
-  // told which is which. Outputs are delivered by the component, and a typo fails strictTemplates.
+  // told which is which. Outputs are delivered by the component. A typo in an output's name goes
+  // unnoticed: strictTemplates takes an unknown name for a DOM event, so it compiles and never fires.
   listen(): () => void {
     return () => undefined;
   }
