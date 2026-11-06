@@ -9,8 +9,8 @@ import {
 } from '@angular/compiler-cli';
 import { build, formatMessages } from 'esbuild';
 import { existsSync } from 'node:fs';
-import { chmod, mkdtemp, rm, stat } from 'node:fs/promises';
-import { dirname, join, relative, resolve } from 'node:path';
+import { chmod, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import ts from 'typescript';
 import { linkerPlugin } from './linker-plugin.js';
 
@@ -29,6 +29,8 @@ export interface BuildCliOptions {
 export interface BuildCliResult {
   bytes: number;
   hasCompiler: boolean;
+  /** Warnings of the compiler, the linker and esbuild, for the caller to show. */
+  warnings: string[];
 }
 
 const DEFAULT_COMPILER_OPTIONS: CompilerOptions = {
@@ -46,10 +48,11 @@ const DEFAULT_COMPILER_OPTIONS: CompilerOptions = {
 // The entry replaces the root files of the tsconfig, so a config that lists none is fine.
 const IGNORED_CONFIG_ERRORS = new Set([18002, 18003]);
 
-function failWithDiagnostics(diagnostics: readonly ts.Diagnostic[]): void {
+/** Throws on an error and returns the text of the warnings, if any. */
+function checkDiagnostics(diagnostics: readonly ts.Diagnostic[]): string[] {
   const errors = diagnostics.filter(({ category }) => category === ts.DiagnosticCategory.Error);
   if (errors.length > 0) throw new Error(`angular-ink: ${formatDiagnostics(errors)}`);
-  if (diagnostics.length > 0) process.stderr.write(formatDiagnostics(diagnostics));
+  return diagnostics.length > 0 ? [formatDiagnostics(diagnostics).trimEnd()] : [];
 }
 
 function findTsconfig(cwd: string, given: string | undefined): string | undefined {
@@ -64,7 +67,7 @@ function findTsconfig(cwd: string, given: string | undefined): string | undefine
 
 function readProjectConfig(tsconfig: string): ParsedConfiguration {
   const config = readConfiguration(tsconfig);
-  failWithDiagnostics(config.errors.filter(({ code }) => !IGNORED_CONFIG_ERRORS.has(code)));
+  checkDiagnostics(config.errors.filter(({ code }) => !IGNORED_CONFIG_ERRORS.has(code)));
   return config;
 }
 
@@ -77,6 +80,58 @@ function commonFolder(folder: string, file: string): string {
 
 function emittedPath(sourcePath: string): string {
   return sourcePath.replace(/\.ts$/, '.js').replace(/\.mts$/, '.mjs');
+}
+
+// `baseUrl` is deprecated in TypeScript 6, but a project with `ignoreDeprecations` can still set it.
+interface AliasOptions {
+  baseUrl?: string;
+  paths?: Record<string, string[]>;
+  pathsBasePath?: string;
+}
+
+/**
+ * esbuild resolves the project's aliases again, now from the emitted JS. An alias left as written
+ * reaches the original `.ts`, whose decorators would need the JIT compiler at run time. So a target
+ * inside `rootDir` points at the emitted file first, with the original as the fallback for what
+ * was not compiled, like a vendored `.js`. A target in `node_modules` stays as it is.
+ */
+function emittedAliases(
+  { baseUrl, paths, pathsBasePath }: AliasOptions,
+  tsconfig: string,
+  rootDir: string,
+  outDir: string,
+): Record<string, string[]> {
+  const base = baseUrl ?? pathsBasePath ?? dirname(tsconfig);
+  // A bare import through baseUrl is the alias `*`. The longer aliases win over it in esbuild.
+  const aliases = { ...(baseUrl === undefined ? {} : { '*': ['*'] }), ...paths };
+  return Object.fromEntries(
+    Object.entries(aliases).map(([alias, targets]) => [
+      alias,
+      targets.flatMap((target) => {
+        const original = resolve(base, target);
+        const fromRoot = relative(rootDir, original);
+        const compiled =
+          !fromRoot.startsWith('..') && !fromRoot.split(sep).includes('node_modules');
+        return compiled ? [emittedPath(join(outDir, fromRoot)), original] : [original];
+      }),
+    ]),
+  );
+}
+
+/** Keeps esbuild from finding a tsconfig above the temporary folder on its own. */
+async function esbuildTsconfig(
+  options: AliasOptions,
+  tsconfig: string | undefined,
+  rootDir: string,
+  outDir: string,
+): Promise<{ tsconfig: string } | { tsconfigRaw: string }> {
+  if (tsconfig === undefined || (options.baseUrl === undefined && options.paths === undefined)) {
+    return { tsconfigRaw: '{}' };
+  }
+  const path = join(outDir, 'tsconfig.esbuild.json');
+  const paths = emittedAliases(options, tsconfig, rootDir, outDir);
+  await writeFile(path, JSON.stringify({ compilerOptions: { paths } }));
+  return { tsconfig: path };
 }
 
 /** Compiles a terminal app ahead of time and bundles it into one executable file. */
@@ -97,11 +152,12 @@ export async function buildCli(options: BuildCliOptions): Promise<BuildCliResult
   // Under the cwd, so the emitted files find the same node_modules as their sources.
   const outDir = await mkdtemp(join(cwd, '.angular-ink-build-'));
   try {
+    const projectOptions = config?.options ?? DEFAULT_COMPILER_OPTIONS;
     const { diagnostics } = performCompilation({
       // Ambient declarations of the project still apply, but its other sources stay out.
       rootNames: [entry, ...(config?.rootNames ?? []).filter((name) => name.endsWith('.d.ts'))],
       options: {
-        ...(config?.options ?? DEFAULT_COMPILER_OPTIONS),
+        ...projectOptions,
         compilationMode: 'full',
         basePath: rootDir,
         rootDir,
@@ -116,7 +172,7 @@ export async function buildCli(options: BuildCliOptions): Promise<BuildCliResult
         inlineSources: sourcemap,
       },
     });
-    failWithDiagnostics(diagnostics);
+    const warnings = checkDiagnostics(diagnostics);
 
     const bundled = await build({
       absWorkingDir: cwd,
@@ -133,20 +189,26 @@ export async function buildCli(options: BuildCliOptions): Promise<BuildCliResult
       logLevel: 'silent',
       define: { ngDevMode: 'false', ngJitMode: 'false', ngI18nClosureMode: 'false' },
       banner: { js: '#!/usr/bin/env node' },
-      plugins: [linkerPlugin({ sourcemap })],
-      // Without this, esbuild looks for a tsconfig above the temporary folder on its own.
-      ...(tsconfig === undefined ? { tsconfigRaw: '{}' } : { tsconfig }),
+      plugins: [
+        linkerPlugin({
+          sourcemap,
+          onWarning: (message) => {
+            warnings.push(message);
+          },
+        }),
+      ],
+      ...(await esbuildTsconfig(projectOptions as AliasOptions, tsconfig, rootDir, outDir)),
     }).catch((error: unknown) => {
       throw new Error(`angular-ink: ${error instanceof Error ? error.message : String(error)}`);
     });
-    const warnings = await formatMessages(bundled.warnings, { kind: 'warning' });
-    if (warnings.length > 0) process.stderr.write(warnings.join(''));
+    const bundleWarnings = await formatMessages(bundled.warnings, { kind: 'warning' });
+    warnings.push(...bundleWarnings.map((warning) => warning.trimEnd()));
 
     await chmod(out, 0o755);
     const hasCompiler = Object.keys(bundled.metafile.inputs).some((path) =>
       path.includes('@angular/compiler/'),
     );
-    return { bytes: (await stat(out)).size, hasCompiler };
+    return { bytes: (await stat(out)).size, hasCompiler, warnings };
   } finally {
     await rm(outDir, { recursive: true, force: true });
   }

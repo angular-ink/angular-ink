@@ -1,12 +1,19 @@
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { buildCli } from './build.js';
 import { linkerPlugin } from './linker-plugin.js';
+
+const babel = vi.hoisted(() => ({ transformAsync: vi.fn() }));
+vi.mock('@babel/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@babel/core')>();
+  babel.transformAsync.mockImplementation(actual.transformAsync);
+  return { ...actual, transformAsync: babel.transformAsync };
+});
 
 const exec = promisify(execFile);
 const REPO = fileURLToPath(new URL('../../../', import.meta.url));
@@ -47,7 +54,10 @@ describe('buildCli', () => {
     const cwd = join(fixture, `case-${String(caseCount++)}`);
     await mkdir(cwd);
     await Promise.all(
-      Object.entries(files).map(([name, content]) => writeFile(join(cwd, name), content)),
+      Object.entries(files).map(async ([name, content]) => {
+        await mkdir(dirname(join(cwd, name)), { recursive: true });
+        await writeFile(join(cwd, name), content);
+      }),
     );
     return cwd;
   }
@@ -188,6 +198,195 @@ describe('buildCli', () => {
     );
   });
 
+  describe('aliases of a user tsconfig', () => {
+    const greetingSource = (selector: string, text: string): string => `
+      import { Component } from '@angular/core';
+      import { InkText } from '@angular-ink/core';
+
+      @Component({
+        selector: '${selector}',
+        imports: [InkText],
+        template: '<ink-text>${text}</ink-text>',
+      })
+      export class Greeting {}
+    `;
+    const aliasedApp = (importLine: string, component: string): string => `
+      import { renderInk } from '@angular-ink/core';
+      ${importLine}
+
+      const app = await renderInk(${component});
+      app.unmount();
+      await app.waitUntilExit();
+    `;
+    const config = (compilerOptions: object): string =>
+      JSON.stringify({
+        compilerOptions: {
+          target: 'ES2022',
+          module: 'ES2022',
+          moduleResolution: 'bundler',
+          skipLibCheck: true,
+          ...compilerOptions,
+        },
+        angularCompilerOptions: { strictTemplates: true },
+      });
+
+    async function buildAndRead(cwd: string): Promise<{ text: string; stdout: string }> {
+      const { hasCompiler } = await buildCli({ entry: 'main.ts', out: 'cli.mjs', cwd });
+      expect(hasCompiler).toBe(false);
+      const { stdout } = await exec('node', [join(cwd, 'cli.mjs')], { cwd, timeout: 30_000 });
+      return { text: await readFile(join(cwd, 'cli.mjs'), 'utf8'), stdout };
+    }
+
+    it(
+      'bundles the AOT output of a wildcard alias, not the sources',
+      async () => {
+        const cwd = await makeCase({
+          'main.ts': aliasedApp("import { Greeting } from '@app/greeting';", 'Greeting'),
+          'src/greeting.ts': greetingSource('ink-greeting', 'hello alias'),
+          'tsconfig.json': config({ paths: { '@app/*': ['./src/*'] } }),
+        });
+        const { text, stdout } = await buildAndRead(cwd);
+        expect(stdout).toContain('hello alias');
+        expect(text).toContain('selectors:[["ink-greeting"]]');
+        expect(text).not.toContain('selector:"ink-greeting"');
+        expect(text).not.toContain('__decorate');
+      },
+      BUILD_TIMEOUT,
+    );
+
+    it(
+      'maps an exact alias with a .ts target to the emitted file',
+      async () => {
+        const cwd = await makeCase({
+          'main.ts': aliasedApp("import { Greeting } from '@greeting';", 'Greeting'),
+          'src/greeting.ts': greetingSource('ink-exact', 'hello exact'),
+          'tsconfig.json': config({ paths: { '@greeting': ['./src/greeting.ts'] } }),
+        });
+        const { text, stdout } = await buildAndRead(cwd);
+        expect(stdout).toContain('hello exact');
+        expect(text).toContain('selectors:[["ink-exact"]]');
+      },
+      BUILD_TIMEOUT,
+    );
+
+    it(
+      'bundles the AOT output of an import through baseUrl',
+      async () => {
+        const cwd = await makeCase({
+          'main.ts': aliasedApp("import { Greeting } from 'src/greeting';", 'Greeting'),
+          'src/greeting.ts': greetingSource('ink-base', 'hello base'),
+          'tsconfig.json': config({ baseUrl: '.', ignoreDeprecations: '6.0' }),
+        });
+        const { text, stdout } = await buildAndRead(cwd);
+        expect(stdout).toContain('hello base');
+        expect(text).toContain('selectors:[["ink-base"]]');
+      },
+      BUILD_TIMEOUT,
+    );
+
+    it(
+      'keeps a library alias on node_modules and links it',
+      async () => {
+        const cwd = await makeCase({
+          'main.ts': `
+            import { Component } from '@angular/core';
+            import { InkText, renderInk } from '@ui';
+
+            @Component({
+              selector: 'ink-library',
+              imports: [InkText],
+              template: '<ink-text>hello library</ink-text>',
+            })
+            class Library {}
+
+            const app = await renderInk(Library);
+            app.unmount();
+            await app.waitUntilExit();
+          `,
+          'tsconfig.json': config({
+            paths: { '@ui': ['./node_modules/@angular-ink/core'] },
+          }),
+        });
+        await cp(
+          join(fixture, 'node_modules/@angular-ink/core'),
+          join(cwd, 'node_modules/@angular-ink/core'),
+          { recursive: true },
+        );
+        const { text, stdout } = await buildAndRead(cwd);
+        expect(stdout).toContain('hello library');
+        expect(text).not.toContain('ngDeclareComponent');
+      },
+      BUILD_TIMEOUT,
+    );
+
+    it(
+      'falls back to the original target of an alias that was not compiled',
+      async () => {
+        const cwd = await makeCase({
+          'main.ts': `
+            import { Component } from '@angular/core';
+            import { InkText, renderInk } from '@angular-ink/core';
+            import { vendored } from '@vendor';
+
+            @Component({
+              selector: 'ink-vendor',
+              imports: [InkText],
+              template: '<ink-text>{{ text }}</ink-text>',
+            })
+            class Vendor {
+              readonly text = vendored;
+            }
+
+            const app = await renderInk(Vendor);
+            app.unmount();
+            await app.waitUntilExit();
+          `,
+          'vendor/lib.js': "export const vendored = 'hello vendored';\n",
+          'vendor/lib.d.ts': 'export declare const vendored: string;\n',
+          'tsconfig.json': config({ paths: { '@vendor': ['./vendor/lib'] } }),
+        });
+        const { stdout } = await buildAndRead(cwd);
+        expect(stdout).toContain('hello vendored');
+      },
+      BUILD_TIMEOUT,
+    );
+  });
+
+  it(
+    'wraps a bundling failure and cleans up',
+    async () => {
+      const cwd = await makeCase({
+        'main.ts': '/// <reference path="./ambient.d.ts" />\nimport \'not-installed\';\n',
+        'ambient.d.ts': "declare module 'not-installed';\n",
+      });
+      await expect(buildCli({ entry: 'main.ts', out: 'cli.mjs', cwd })).rejects.toThrow(
+        /^angular-ink: [\s\S]*Could not resolve "not-installed"/,
+      );
+      expect((await readdir(cwd)).sort()).toEqual(['ambient.d.ts', 'main.ts']);
+    },
+    BUILD_TIMEOUT,
+  );
+
+  it(
+    'returns the warnings of the compiler and of esbuild without printing them',
+    async () => {
+      const stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+      const unusedImport = await makeCase({
+        'main.ts': appSource('<ink-text>hello</ink-text>'),
+      });
+      const compiled = await buildCli({ entry: 'main.ts', out: 'cli.mjs', cwd: unusedImport });
+      expect(compiled.warnings.join('\n')).toContain('NG8113');
+
+      const negativeZero = await makeCase({
+        'main.ts': 'export const isZero = (v: number) => v === -0;\n',
+      });
+      const bundled = await buildCli({ entry: 'main.ts', out: 'cli.mjs', cwd: negativeZero });
+      expect(bundled.warnings.join('\n')).toContain('Comparison with -0');
+      expect(stderr).not.toHaveBeenCalled();
+    },
+    BUILD_TIMEOUT,
+  );
+
   it(
     'writes a source map that names the app when asked, and can skip minifying',
     async () => {
@@ -233,7 +432,7 @@ describe('linkerPlugin', () => {
     const onLoad = vi.fn((_filter: unknown, callback: OnLoad) => {
       hook = callback;
     });
-    void linkerPlugin({ sourcemap: false }).setup({ onLoad } as never);
+    void linkerPlugin({ sourcemap: false, onWarning: () => undefined }).setup({ onLoad } as never);
     return hook!;
   }
 
@@ -243,6 +442,20 @@ describe('linkerPlugin', () => {
       const path = join(folder, 'plain.mjs');
       await writeFile(path, 'export const answer = 42;\n');
       await expect(loadHook()({ path })).resolves.toBeUndefined();
+    } finally {
+      await rm(folder, { recursive: true, force: true });
+    }
+  });
+
+  it('throws instead of returning unlinked code when Babel gives nothing back', async () => {
+    const folder = await mkdtemp(join(REPO, 'out-tsc/linker-'));
+    try {
+      const path = join(folder, 'declared.mjs');
+      await writeFile(path, 'export const marker = "ɵɵngDeclareComponent";\n');
+      babel.transformAsync.mockResolvedValueOnce(null);
+      await expect(loadHook()({ path })).rejects.toThrow(
+        `angular-ink: the linker returned no code for "${path}"`,
+      );
     } finally {
       await rm(folder, { recursive: true, force: true });
     }

@@ -50,6 +50,30 @@ describe('parseBuildArgs', () => {
 });
 
 describe('main', () => {
+  it('prints the warnings of a build on stderr', async () => {
+    await mkdir(join(REPO, 'out-tsc'), { recursive: true });
+    const folder = await mkdtemp(join(REPO, 'out-tsc/cli-main-'));
+    try {
+      const entry = join(folder, 'main.ts');
+      await writeFile(entry, 'export const isZero = (v: number) => v === -0;\n');
+      await writeFile(join(folder, 'tsconfig.json'), '{"files":[]}');
+      vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+      const stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+      const code = await main([
+        'build',
+        entry,
+        '--out',
+        join(folder, 'cli.mjs'),
+        '--tsconfig',
+        join(folder, 'tsconfig.json'),
+      ]);
+      expect(code).toBe(0);
+      expect(stderr).toHaveBeenCalledWith(expect.stringContaining('Comparison with -0'));
+    } finally {
+      await rm(folder, { recursive: true, force: true });
+    }
+  }, 120_000);
+
   it('prints an error on stderr and returns 1', async () => {
     const stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
     await expect(main(['build', 'nope.ts', '--out', 'cli.mjs'])).resolves.toBe(1);

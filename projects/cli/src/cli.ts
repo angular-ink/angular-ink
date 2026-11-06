@@ -47,7 +47,8 @@ export function parseBuildArgs(argv: readonly string[]): BuildCliOptions {
 export async function main(argv: readonly string[]): Promise<number> {
   try {
     const options = parseBuildArgs(argv);
-    const { bytes } = await buildCli(options);
+    const { bytes, warnings } = await buildCli(options);
+    for (const warning of warnings) process.stderr.write(`${warning}\n`);
     process.stdout.write(`${options.out}: ${String(bytes)} bytes\n`);
     return 0;
   } catch (error) {
