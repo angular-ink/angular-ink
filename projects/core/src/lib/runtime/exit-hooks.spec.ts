@@ -62,9 +62,15 @@ describe('installExitHooks', () => {
       emitter.once(signal, vi.fn());
       emitter.emit(signal);
       expect(exit).not.toHaveBeenCalled();
-      // The once listener is gone now, so the next signal ends the process.
+    });
+
+    it('steps aside once restored, so that a later signal is not held back', () => {
+      const { emitter, target } = fakeProcess();
+      const appListener = vi.fn();
+      emitter.on(signal, appListener);
+      installExitHooks(vi.fn(), target, vi.fn());
       emitter.emit(signal);
-      expect(exit).toHaveBeenCalledWith(code);
+      expect(emitter.listeners(signal)).toEqual([appListener]);
     });
 
     it('sees a once listener added before the hooks, by running first', () => {
@@ -116,15 +122,22 @@ describe('installExitHooks', () => {
         { stdio: ['ignore', 'pipe', 'inherit'] },
       );
       let stdout = '';
-      return new Promise<{ code: number | null; stdout: string }>((resolve, reject) => {
+      // A process that ignores the signal must fail the test and not outlive it.
+      const stuck = setTimeout(() => child.kill('SIGKILL'), 5000);
+      return new Promise<{
+        code: number | null;
+        signal: NodeJS.Signals | null;
+        stdout: string;
+      }>((resolve, reject) => {
         child.on('error', reject);
         child.stdout.on('data', (chunk: Buffer) => {
           const before = stdout;
           stdout += chunk.toString();
           if (!before.includes('ready') && stdout.includes('ready')) child.kill('SIGTERM');
         });
-        child.on('close', (code) => {
-          resolve({ code, stdout });
+        child.on('close', (code, signal) => {
+          clearTimeout(stuck);
+          resolve({ code, signal, stdout });
         });
       });
     }
@@ -139,6 +152,22 @@ describe('installExitHooks', () => {
       `);
       expect(stdout).toBe('ready\nrestored\ncleaned\n');
       expect(code).toBe(7);
+    }, 30_000);
+
+    // The rule of the signal-exit package, which many dependencies bring in: it ends the process
+    // only when its own listeners are the last ones.
+    it('does not wait forever for a listener that waits for being the last', async () => {
+      const { signal, stdout } = await runAndTerminate(`
+        const last = () => {
+          if (process.listeners('SIGTERM').length === 1) {
+            process.off('SIGTERM', last);
+            process.kill(process.pid, 'SIGTERM');
+          }
+        };
+        process.on('SIGTERM', last);
+      `);
+      expect(stdout).toBe('ready\nrestored\n');
+      expect(signal).toBe('SIGTERM');
     }, 30_000);
 
     it('ends with the exit code of the signal when nobody else listens', async () => {

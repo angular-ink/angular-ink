@@ -52,6 +52,9 @@ export function installExitHooks(
       () => {
         restoreOnce();
         if (target.listeners(event).every((other) => EXIT_HOOK in other)) target.exit(code);
+        // Nothing is left to do here, and a listener like signal-exit's ends the process only when
+        // it is the last one, so staying would leave both waiting for the other.
+        else target.off(event, listener);
       },
       { [EXIT_HOOK]: true },
     );
