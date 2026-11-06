@@ -121,7 +121,7 @@ describe('describeError', () => {
     expect(describeError(error, dir).stack).toEqual([
       { name: 'run', place: '(app.js:1:2)' },
       { name: '', place: '(app.js:3:4)' },
-      { name: '    at native', place: null },
+      { name: '    at native\\t ', place: null },
     ]);
   });
 
@@ -144,14 +144,14 @@ describe('describeError', () => {
 });
 
 describe('paintErrorOverview', () => {
-  it('gives each excerpt line one row, so long lines keep the message on the screen', () => {
-    const long = join(dir, 'long-lines.js');
-    writeFileSync(long, Array.from({ length: 7 }, () => 'x'.repeat(499)).join('\n'));
-    const grid = paintErrorOverview(errorAt(long, 4, 1), 80, yoga);
-    expect(grid.rows).toBeLessThanOrEqual(24);
+  it('wraps a long excerpt line instead of cutting it, as Ink does', () => {
+    const long = join(dir, 'long-line.js');
+    writeFileSync(long, `${'x'.repeat(150)}end`);
+    const grid = paintErrorOverview(errorAt(long, 1, 1), 80, yoga);
     const rows = gridToString(grid, { ansi: false }).split('\n');
-    expect(rows.filter((row) => row.includes('xxx'))).toHaveLength(7);
-    expect(rows[1]).toContain('boom');
+    expect(rows.filter((row) => row.includes('xxx')).length).toBeGreaterThan(1);
+    expect(rows.some((row) => row.includes('xend'))).toBe(true);
+    expect(rows.join('')).not.toContain('…');
   });
 
   it('paints the label, the message, the location, the excerpt and the stack', () => {

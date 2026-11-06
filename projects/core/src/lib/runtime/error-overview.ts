@@ -129,7 +129,8 @@ function safeFilePath(url: string): string | null {
 
 function stackEntry(line: string, cwd: string): StackEntry {
   const frame = parseStackLine(line);
-  if (frame === null) return { name: line, place: null };
+  // Ink prints this after a line it cannot parse: the backslash and the t, not a tab.
+  if (frame === null) return { name: `${line}\\t `, place: null };
   return { name: frame.fn, place: `(${displayPath(frame.file, cwd)}:${locationOf(frame)})` };
 }
 
@@ -160,7 +161,6 @@ function stackEntry(line: string, cwd: string): StackEntry {
                 >
               </ink-box>
               <ink-text
-                wrap="truncate-end"
                 [backgroundColor]="row.isOrigin ? 'red' : undefined"
                 [color]="row.isOrigin ? 'white' : undefined"
                 >{{ ' ' + row.value }}</ink-text
