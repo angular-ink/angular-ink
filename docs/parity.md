@@ -25,6 +25,6 @@ width, colors, attributes), the cursor and the exit code.
 | `screen-shrinks-to-the-frame-height` | identical |
 | `screen-narrows-to-the-frame-height` | identical |
 | `screen-narrows-with-a-short-frame` | differs: Ink erases the rows of the old frame without counting what the terminal reflowed, so narrowing leaves ghost lines above the new frame. AGENTS.md requires that no ghost lines remain, so angular-ink counts the reflow and erases them. |
-| `static-above-a-frame-taller-than-the-screen` | differs: the scrollback differs, the screen does not. A frame that overflows is drawn again in full on each commit, and `<Static>` makes React commit twice per update, so Ink leaves more copies of the frame there. angular-ink draws once per change of the frame and writes permanent output over the frame it has. |
+| `static-above-a-frame-taller-than-the-screen` | differs: only the scrollback differs, which the entry enforces. A frame that overflows is drawn again in full on each commit, and `<Static>` makes React commit twice per update, so Ink leaves more copies of the frame there. angular-ink draws once per change of the frame and writes permanent output over the frame it has. |
 | `value-edges` | identical |
 | `error-excerpt` | identical |

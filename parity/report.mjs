@@ -1,28 +1,54 @@
 // The list of accepted divergences, read from the README, and the public report of a run.
 const SECTION = '## Expected divergences';
 
-/** Reads `- \`scenario\`: why` lines from the section of the README, into a map. */
+/**
+ * Reads the entries of the section, as `- \`scenario\` (moment: scope field field; moment: …): why`.
+ * An entry permits those differences and no others, and each of them has to be there.
+ */
 export function expectedDivergences(readme) {
   const start = readme.indexOf(SECTION);
   const expected = new Map();
   if (start === -1) return expected;
   const rest = readme.slice(start + SECTION.length);
-  const end = rest.indexOf('\n## ');
+  // Any heading ends the list, a subsection too.
+  const end = rest.indexOf('\n##');
   for (const line of (end === -1 ? rest : rest.slice(0, end)).split('\n')) {
-    const match = /^- `([^`]+)`: (.+)$/.exec(line);
-    if (match !== null) expected.set(match[1], match[2]);
+    const match = /^- `([^`]+)` \(([^)]+)\): (.+)$/.exec(line);
+    if (match !== null) {
+      expected.set(match[1], { permits: parsePermits(match[2]), reason: match[3] });
+    } else if (line.startsWith('- ')) {
+      throw new Error(`parity/README.md: an entry with no moment, scope and field: ${line}`);
+    }
   }
   return expected;
 }
 
-/** What makes a run fail, one line each. A listed divergence that went away has to leave the list. */
+function parsePermits(text) {
+  return text.split('; ').flatMap((part) => {
+    const [moment, what] = part.split(': ');
+    const [scope, ...fields] = what.split(' ');
+    return fields.map((field) => permitKey({ moment, scope, field }));
+  });
+}
+
+const permitKey = ({ moment, scope, field }) => `${moment}: ${scope} ${field}`;
+
+/** Why a run fails, one line each. A permitted difference that went away has to leave the list. */
 export function problemsOf(results, expected, allScenarios) {
   const problems = [];
-  for (const { name, difference, reason, failed } of results) {
-    if (failed) problems.push(`${name}: the run itself failed`);
-    else if (difference !== null && reason === undefined) problems.push(`${name}: differs`);
-    else if (difference === null && reason !== undefined)
-      problems.push(`${name}: listed, but same`);
+  for (const { name, differences, failed } of results) {
+    if (failed) {
+      problems.push(`${name}: the run itself failed`);
+      continue;
+    }
+    const permits = expected.get(name)?.permits ?? [];
+    const seen = differences.map(permitKey);
+    for (const key of seen) {
+      if (!permits.includes(key)) problems.push(`${name}: differs at ${key}`);
+    }
+    for (const key of permits) {
+      if (!seen.includes(key)) problems.push(`${name}: listed at ${key}, but same`);
+    }
   }
   for (const name of expected.keys()) {
     if (!allScenarios.includes(name)) problems.push(`${name}: listed, but no such scenario`);
@@ -31,11 +57,11 @@ export function problemsOf(results, expected, allScenarios) {
 }
 
 export function parityReport(results) {
-  const same = results.filter(({ difference }) => difference === null).length;
+  const same = results.filter(({ differences }) => differences.length === 0).length;
   const summary = `${String(same)}/${String(results.length)} scenarios identical to Ink 8.0.0`;
-  const rows = results.map(({ name, difference, reason }) => {
-    if (difference === null) return `| \`${name}\` | identical |`;
-    return `| \`${name}\` | differs: ${reason ?? difference} |`;
+  const rows = results.map(({ name, differences, reason }) => {
+    if (differences.length === 0) return `| \`${name}\` | identical |`;
+    return `| \`${name}\` | differs: ${reason ?? differences.map(permitKey).join('; ')} |`;
   });
   const text = [
     '# Parity with Ink 8.0.0',

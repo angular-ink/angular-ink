@@ -1,6 +1,12 @@
 import xterm from '@xterm/headless';
 import { describe, expect, it } from 'vitest';
-import { compareScreens, readScreen } from './compare-screens.mjs';
+import {
+  compareScreens,
+  differencesBetween,
+  readScreen,
+  scrollbackOf,
+  viewportOf,
+} from './compare-screens.mjs';
 
 function screenOf(text, { columns = 20, rows = 4 } = {}) {
   const terminal = new xterm.Terminal({ cols: columns, rows, allowProposedApi: true });
@@ -126,5 +132,47 @@ describe('compareScreens', () => {
 
   it('compares where the cursor ended', async () => {
     expect(await differenceOf('a\r\n', 'a')).toMatchObject({ field: 'cursor' });
+  });
+});
+
+describe('differencesBetween', () => {
+  it('finds the first difference of each kind, not only the first one', async () => {
+    const a = await screenOf('ab\r\n\x1b[31mc');
+    const b = await screenOf('aX\r\n\x1b[32mc');
+    expect(differencesBetween(a, b).map(({ field }) => field)).toEqual(['char', 'fg']);
+  });
+
+  it('is empty for two same screens', async () => {
+    expect(differencesBetween(await screenOf('a'), await screenOf('a'))).toEqual([]);
+  });
+});
+
+describe('viewportOf and scrollbackOf', () => {
+  const size = { columns: 5, rows: 2 };
+  const rowsOf = (screen) =>
+    screen.rows.map((row) =>
+      row
+        .map((cell) => cell.char)
+        .join('')
+        .trimEnd(),
+    );
+
+  it('split the history where the screen starts', async () => {
+    const screen = await screenOf('a\r\nb\r\nc\r\nd', size);
+    expect(rowsOf(scrollbackOf(screen))).toEqual(['a', 'b']);
+    expect(rowsOf(viewportOf(screen))).toEqual(['c', 'd']);
+  });
+
+  it('count the cursor from the top of the viewport', async () => {
+    const screen = await screenOf('a\r\nb\r\nc\r\nd', size);
+    expect(viewportOf(screen).cursor).toEqual({ row: 1, column: 1 });
+  });
+
+  it('let the same viewport pass under a different scrollback', async () => {
+    const a = await screenOf('x\r\ny\r\nc\r\nd', size);
+    const b = await screenOf('y\r\nc\r\nd', size);
+    expect(compareScreens(a, b)).toMatchObject({ field: 'rows' });
+    expect(compareScreens(viewportOf(a), viewportOf(b))).toBeNull();
+    expect(compareScreens(scrollbackOf(a), scrollbackOf(b))).toMatchObject({ field: 'rows' });
   });
 });

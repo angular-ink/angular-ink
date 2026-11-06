@@ -6,48 +6,83 @@ const README = [
   '- `not-here`: another section',
   '## Expected divergences',
   'Some words.',
-  '- `known`: why it differs',
-  '- `other`: why that differs',
+  '- `known` (resized: viewport char fg; after the end: scrollback rows): why it differs',
   '## Next',
   '- `not-here-either`: another section',
 ].join('\n');
 
 describe('expectedDivergences', () => {
-  it('reads only the entries of its section', () => {
+  it('reads what each entry of its section permits', () => {
     expect([...expectedDivergences(README)]).toEqual([
-      ['known', 'why it differs'],
-      ['other', 'why that differs'],
+      [
+        'known',
+        {
+          permits: [
+            'resized: viewport char',
+            'resized: viewport fg',
+            'after the end: scrollback rows',
+          ],
+          reason: 'why it differs',
+        },
+      ],
     ]);
+  });
+
+  it('stops at a subsection, whose list has no entries', () => {
+    const readme = '## Expected divergences\n### Pending\n- something else';
+    expect(expectedDivergences(readme).size).toBe(0);
   });
 
   it('gives nothing for a README without the section', () => {
     expect(expectedDivergences('# Title').size).toBe(0);
   });
+
+  it('refuses an entry that does not say what it permits', () => {
+    expect(() => expectedDivergences('## Expected divergences\n- `known`: why')).toThrow(
+      /no moment, scope and field/,
+    );
+  });
 });
 
 describe('problemsOf', () => {
-  const same = { name: 'a', difference: null };
-  const differs = { name: 'a', difference: 'char at 0,0' };
+  const char = { moment: 'resized', scope: 'viewport', field: 'char' };
+  const rows = { moment: 'after the end', scope: 'scrollback', field: 'rows' };
   const none = new Map();
-  const listed = new Map([['a', 'why']]);
+  const listed = new Map([['a', { permits: ['after the end: scrollback rows'], reason: 'why' }]]);
+  const result = (...differences) => ({ name: 'a', differences });
 
-  it('has none for a same scenario, or a listed one that differs', () => {
-    expect(problemsOf([same], none, ['a'])).toEqual([]);
-    expect(problemsOf([{ ...differs, reason: 'why' }], listed, ['a'])).toEqual([]);
+  it('has none for a same scenario, or a listed one that differs as it says', () => {
+    expect(problemsOf([result()], none, ['a'])).toEqual([]);
+    expect(problemsOf([result(rows)], listed, ['a'])).toEqual([]);
   });
 
   it('fails on a difference that is not listed', () => {
-    expect(problemsOf([differs], none, ['a'])).toEqual(['a: differs']);
+    expect(problemsOf([result(char)], none, ['a'])).toEqual([
+      'a: differs at resized: viewport char',
+    ]);
+  });
+
+  it('fails on a new difference in a listed scenario', () => {
+    expect(problemsOf([result(rows, char)], listed, ['a'])).toEqual([
+      'a: differs at resized: viewport char',
+    ]);
+  });
+
+  it('fails when a scrollback entry also differs on the viewport, at the same moment', () => {
+    const viewport = { ...rows, scope: 'viewport', field: 'char' };
+    expect(problemsOf([result(rows, viewport)], listed, ['a'])).toEqual([
+      'a: differs at after the end: viewport char',
+    ]);
   });
 
   it('fails on a listed difference that went away', () => {
-    expect(problemsOf([{ ...same, reason: 'why' }], listed, ['a'])).toEqual([
-      'a: listed, but same',
+    expect(problemsOf([result()], listed, ['a'])).toEqual([
+      'a: listed at after the end: scrollback rows, but same',
     ]);
   });
 
   it('fails on a listed scenario that crashed, as the list covers only differences', () => {
-    const crashed = { ...differs, reason: 'why', failed: true };
+    const crashed = { ...result(rows), failed: true };
     expect(problemsOf([crashed], listed, ['a'])).toEqual(['a: the run itself failed']);
   });
 
@@ -63,8 +98,12 @@ describe('problemsOf', () => {
 describe('parityReport', () => {
   it('counts the identical scenarios and gives the reason of a listed one', () => {
     const { summary, text } = parityReport([
-      { name: 'a', difference: null },
-      { name: 'b', difference: 'char at 0,0', reason: 'why' },
+      { name: 'a', differences: [] },
+      {
+        name: 'b',
+        differences: [{ moment: 'resized', scope: 'viewport', field: 'char' }],
+        reason: 'why',
+      },
     ]);
     expect(summary).toBe('1/2 scenarios identical to Ink 8.0.0');
     expect(text).toContain('**1/2 scenarios');

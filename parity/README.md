@@ -10,8 +10,7 @@ come in another order as long as the terminal ends up the same.
 ./scripts/dev node parity/run.mjs --only chat # one scenario, leaves the report alone
 ```
 
-A full run writes [`docs/parity.md`](../docs/parity.md), with the count of identical scenarios. A
-difference that has an entry below also fails the run once it goes away, so the list stays true.
+A full run writes [`docs/parity.md`](../docs/parity.md), with the count of identical scenarios.
 
 ## Layout
 
@@ -53,8 +52,24 @@ way. `error-excerpt` shows the error overview with a made-up stack, so both show
 Each entry is a difference that is not fixed. **These two wait for the maintainer's decision**: only
 the maintainer can accept an exception.
 
-- `screen-narrows-with-a-short-frame`: Ink erases the rows of the old frame without counting what the terminal reflowed, so narrowing leaves ghost lines above the new frame. AGENTS.md requires that no ghost lines remain, so angular-ink counts the reflow and erases them.
-- `static-above-a-frame-taller-than-the-screen`: the scrollback differs, the screen does not. A frame that overflows is drawn again in full on each commit, and `<Static>` makes React commit twice per update, so Ink leaves more copies of the frame there. angular-ink draws once per change of the frame and writes permanent output over the frame it has.
+An entry says what it permits, as `moment: scope field field`, separated by `;`. The moments are the
+marks in `scenarios.mjs` and `after the end`, the scope is `viewport`, `scrollback` or `exit`, and the
+fields are those of `compareScreens`. The run fails on any other difference in that scenario, and on
+a permitted one that went away. Inside a permitted moment and field a new difference passes unseen.
+
+- `screen-narrows-with-a-short-frame` (resized: viewport char fg cursor; after the end: viewport char fg cursor): Ink erases the rows of the old frame without counting what the terminal reflowed, so narrowing leaves ghost lines above the new frame. AGENTS.md requires that no ghost lines remain, so angular-ink counts the reflow and erases them.
+- `static-above-a-frame-taller-than-the-screen` (after the end: scrollback rows): only the scrollback differs, which the entry enforces. A frame that overflows is drawn again in full on each commit, and `<Static>` makes React commit twice per update, so Ink leaves more copies of the frame there. angular-ink draws once per change of the frame and writes permanent output over the frame it has.
+
+### Pending decision, outside any scenario
+
+These differ from Ink on purpose. No scenario compares them, so no run fails on them, and the
+maintainer has not decided on them yet.
+
+- `width="10"` means 10 cells here and 10% in Ink, because a static attribute is always a string and
+  has to mean the `width={10}` of Ink. The same goes for the other size inputs.
+- A number in a color stops at 15 digits in a prop, and at the safe integers in text that carries its
+  own SGR. Ink passes any digits on, and past those limits a number prints as `1e+21`, which is no
+  longer one parameter of a sequence, so here the color is dropped.
 
 ## Not compared
 

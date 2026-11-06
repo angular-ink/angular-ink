@@ -46,24 +46,52 @@ export function readScreen(terminal) {
   }
   return {
     columns: terminal.cols,
+    viewportRows: terminal.rows,
     rows,
     cursor: { row: active.baseY + active.cursorY, column: active.cursorX },
   };
 }
 
-/** The first difference between two screens with its position, or null if they are the same. */
-export function compareScreens(a, b) {
-  if (a.columns !== b.columns) return { field: 'columns', a: a.columns, b: b.columns };
+/** The rows a user sees now, with the cursor counted from their top. */
+export function viewportOf(screen) {
+  const top = screen.rows.length - screen.viewportRows;
+  return {
+    columns: screen.columns,
+    rows: screen.rows.slice(top),
+    cursor: { row: screen.cursor.row - top, column: screen.cursor.column },
+  };
+}
+
+/** The rows above the viewport. The cursor is never there. */
+export function scrollbackOf(screen) {
+  const top = screen.rows.length - screen.viewportRows;
+  return { columns: screen.columns, rows: screen.rows.slice(0, top), cursor: null };
+}
+
+/** The first difference of each kind between two screens, in the order they were found. */
+export function differencesBetween(a, b) {
+  if (a.columns !== b.columns) return [{ field: 'columns', a: a.columns, b: b.columns }];
   if (a.rows.length !== b.rows.length) {
-    return { field: 'rows', a: a.rows.length, b: b.rows.length };
+    return [{ field: 'rows', a: a.rows.length, b: b.rows.length }];
   }
+  const found = new Map();
   for (const [row, cells] of a.rows.entries()) {
     for (const [column, cell] of cells.entries()) {
       const other = b.rows[row][column];
-      const field = CELL_FIELDS.find((name) => cell[name] !== other[name]);
-      if (field !== undefined) return { row, column, field, a: cell[field], b: other[field] };
+      for (const field of CELL_FIELDS) {
+        if (cell[field] !== other[field] && !found.has(field)) {
+          found.set(field, { row, column, field, a: cell[field], b: other[field] });
+        }
+      }
     }
   }
-  const sameCursor = a.cursor?.row === b.cursor?.row && a.cursor?.column === b.cursor?.column;
-  return sameCursor ? null : { field: 'cursor', a: a.cursor, b: b.cursor };
+  if (a.cursor?.row !== b.cursor?.row || a.cursor?.column !== b.cursor?.column) {
+    found.set('cursor', { field: 'cursor', a: a.cursor, b: b.cursor });
+  }
+  return [...found.values()];
+}
+
+/** The first difference between two screens with its position, or null if they are the same. */
+export function compareScreens(a, b) {
+  return differencesBetween(a, b)[0] ?? null;
 }

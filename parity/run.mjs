@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { join } from 'node:path';
 import { runScenario } from '../e2e/pty-screen.mjs';
 import { buildApps, REPO } from '../scripts/packed-core.mjs';
-import { compareScreens, readScreen } from './compare-screens.mjs';
+import { differencesBetween, readScreen, scrollbackOf, viewportOf } from './compare-screens.mjs';
 import { expectedDivergences, parityReport, problemsOf } from './report.mjs';
 import { SCENARIOS } from './scenarios.mjs';
 
@@ -79,48 +79,63 @@ const plainRows = ({ rows }) =>
     .join('\n')
     .trimEnd();
 
-/** Null when the runs match, or what differs with both screens to look at. */
-function firstDifference(ink, ng) {
+/** Everything that differs, per moment, on the viewport and in the scrollback apart. */
+function differencesOf(ink, ng) {
+  const found = [];
   for (const [index, { label, screen }] of ink.screens.entries()) {
-    const other = ng.screens[index];
-    const difference = compareScreens(screen, other.screen);
-    if (difference !== null) {
-      return {
-        at: label,
-        difference,
-        detail: `--- Ink\n${plainRows(screen)}\n--- angular-ink\n${plainRows(other.screen)}`,
-      };
+    const other = ng.screens[index].screen;
+    for (const [scope, part] of [
+      ['viewport', viewportOf],
+      ['scrollback', scrollbackOf],
+    ]) {
+      for (const difference of differencesBetween(part(screen), part(other))) {
+        found.push({ moment: label, scope, ...difference });
+      }
     }
   }
   if (ink.exitCode !== ng.exitCode) {
-    return {
-      at: 'after the end',
-      difference: { field: 'exit code', a: ink.exitCode, b: ng.exitCode },
-      detail: '',
-    };
+    found.push({
+      moment: 'after the end',
+      scope: 'exit',
+      field: 'code',
+      a: ink.exitCode,
+      b: ng.exitCode,
+    });
   }
-  return null;
+  return {
+    differences: found,
+    detail: `--- Ink\n${lastScreen(ink)}\n--- angular-ink\n${lastScreen(ng)}`,
+  };
 }
 
-function describeDifference({ at, difference }) {
-  const position = difference.row === undefined ? '' : ` at ${difference.row},${difference.column}`;
-  const values = `Ink ${JSON.stringify(difference.a)}, angular-ink ${JSON.stringify(difference.b)}`;
-  return `${at}: ${difference.field}${position}: ${values}`;
+const lastScreen = ({ screens }) => plainRows(screens.at(-1).screen);
+
+function describeDifference({ moment, scope, field, row, column, a, b }) {
+  const position = row === undefined ? '' : ` at ${String(row)},${String(column)}`;
+  const values = `Ink ${JSON.stringify(a)}, angular-ink ${JSON.stringify(b)}`;
+  return `${moment}: ${scope} ${field}${position}: ${values}`;
 }
 
 async function runOne(scenario, bundles) {
   try {
     const ink = await capture(scenario, join(REPO, `parity/ink-apps/${scenario.app}.mjs`));
     const ng = await capture(scenario, bundles[scenario.app]);
-    return firstDifference(ink, ng);
+    return differencesOf(ink, ng);
   } catch (error) {
-    return { at: 'running', difference: { field: 'error' }, detail: String(error), failed: true };
+    return { differences: [], detail: String(error), failed: true };
   }
 }
 
 async function main() {
   const onlyFlag = process.argv.indexOf('--only');
   const only = onlyFlag === -1 ? null : process.argv[onlyFlag + 1].split(',');
+  const names = SCENARIOS.map(({ name }) => name);
+  const unknown = (only ?? []).filter((name) => !names.includes(name));
+  if (unknown.length > 0) {
+    console.error(`no such scenario: ${unknown.join(', ')}`);
+    process.exitCode = 1;
+    return;
+  }
   const scenarios = SCENARIOS.filter(({ name }) => only === null || only.includes(name));
   const expected = expectedDivergences(readFileSync(join(REPO, 'parity/README.md'), 'utf8'));
 
@@ -135,21 +150,19 @@ async function main() {
     );
     for (const scenario of scenarios) {
       const found = await runOne(scenario, bundles);
-      const reason = expected.get(scenario.name);
+      const entry = expected.get(scenario.name);
       results.push({
         name: scenario.name,
-        difference: found === null ? null : describeDifference(found),
-        reason,
-        failed: found?.failed === true,
+        differences: found.differences,
+        reason: entry?.reason,
+        failed: found.failed === true,
       });
-      if (found === null) {
-        console.log(`${reason === undefined ? 'SAME' : 'STALE'} ${scenario.name}`);
-      } else {
-        const known = reason !== undefined && found.failed !== true;
-        console.log(`${known ? 'KNOWN' : 'DIFF'} ${scenario.name}`);
-        console.log(`  ${describeDifference(found)}`);
-        if (!known) console.log(found.detail);
-      }
+      const clean = found.differences.length === 0 && found.failed !== true;
+      const verdict = clean ? 'SAME' : entry === undefined ? 'DIFF' : 'LISTED';
+      console.log(`${verdict} ${scenario.name}`);
+      for (const difference of found.differences)
+        console.log(`  ${describeDifference(difference)}`);
+      if (found.failed === true || (!clean && entry === undefined)) console.log(found.detail);
     }
   } finally {
     rmSync(fixture, { recursive: true, force: true });
@@ -158,11 +171,7 @@ async function main() {
   const report = parityReport(results);
   if (only === null) writeFileSync(join(REPO, 'docs/parity.md'), report.text);
   console.log(report.summary);
-  const problems = problemsOf(
-    results,
-    expected,
-    SCENARIOS.map(({ name }) => name),
-  );
+  const problems = problemsOf(results, expected, names);
   for (const problem of problems) console.error(problem);
   if (problems.length > 0) process.exitCode = 1;
 }
