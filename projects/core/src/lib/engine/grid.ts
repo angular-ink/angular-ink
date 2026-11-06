@@ -71,6 +71,7 @@ function writeRun(grid: CellGrid, x: number, y: number, span: StyledSpan, clip: 
     if (start >= right) break;
     const first = Math.max(start, left);
     const last = Math.min(column, right) - 1;
+    if (splitsOutsideWide(grid, first, last, y, left, right)) continue;
     if (start < left || column > right) {
       // Half a wide character is visible: keep its style on a space.
       for (let at = first; at <= last; at++) setCell(grid, at, y, ' ', style);
@@ -84,6 +85,23 @@ function writeRun(grid: CellGrid, x: number, y: number, span: StyledSpan, clip: 
     }
   }
   return column;
+}
+
+// A write that would cut a wide character whose other half is outside the clip is skipped, so
+// nothing outside the clip changes.
+function splitsOutsideWide(
+  grid: CellGrid,
+  first: number,
+  last: number,
+  y: number,
+  left: number,
+  right: number,
+): boolean {
+  const row = y * grid.columns;
+  const startsOnSecondHalf = grid.chars[row + first] === '' && first - 1 < left;
+  const endsOnFirstHalf =
+    grid.chars[row + last] !== '' && grid.chars[row + last + 1] === '' && last + 1 >= right;
+  return startsOnSecondHalf || endsOnFirstHalf;
 }
 
 /** Writes a cell. If it lands on the second half of a wide character, the first half becomes a space. */
@@ -135,23 +153,28 @@ export function gridToString(grid: CellGrid, options: { ansi: boolean }): string
 function rowToString(grid: CellGrid, y: number, ansi: boolean): string {
   const start = y * grid.columns;
   let end = grid.columns;
-  // A blank in the plain style prints nothing; a styled one can show a color.
+  // A blank that opens no SGR prints nothing; a styled one can show a color.
   while (end > 0) {
     const index = start + end - 1;
-    const blank = grid.chars[index] === ' ' && (!ansi || grid.styles[index] === PLAIN_STYLE);
+    const blank =
+      grid.chars[index] === ' ' && (!ansi || openSgr(grid.styles[index] ?? PLAIN_STYLE) === '');
     if (!blank) break;
     end--;
   }
   let out = '';
-  let open: CellStyle = PLAIN_STYLE;
+  // Styles compare by their SGR, so equal styles from before a cache restart add no escape.
+  let openKey = '';
   for (let x = 0; x < end; x++) {
     const index = start + x;
-    if (ansi && grid.styles[index] !== open) {
-      if (open !== PLAIN_STYLE) out += ESC_RESET;
-      open = grid.styles[index] ?? PLAIN_STYLE;
-      out += openSgr(open);
+    if (ansi) {
+      const key = openSgr(grid.styles[index] ?? PLAIN_STYLE);
+      if (key !== openKey) {
+        if (openKey !== '') out += ESC_RESET;
+        out += key;
+        openKey = key;
+      }
     }
     out += grid.chars[index] ?? '';
   }
-  return ansi && open !== PLAIN_STYLE ? out + ESC_RESET : out;
+  return openKey === '' ? out : out + ESC_RESET;
 }

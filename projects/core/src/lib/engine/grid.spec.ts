@@ -145,4 +145,25 @@ describe('gridToString', () => {
   it('is empty for a grid with nothing in it', () => {
     expect(plain(createGrid(3, 2))).toBe('');
   });
+
+  it('adds no escape between equal styles that are different objects', () => {
+    const grid = createGrid(2, 1);
+    grid.chars[0] = 'a';
+    grid.chars[1] = 'b';
+    grid.styles[0] = { ...RED };
+    grid.styles[1] = { ...RED };
+    expect(gridToString(grid, { ansi: true })).toBe('\x1b[31mab\x1b[0m');
+  });
+});
+
+describe('writeSpan at a clip edge that cuts a wide character', () => {
+  it('changes nothing outside the clip', () => {
+    const grid = createGrid(4, 1);
+    writeSpan(grid, 0, 0, { text: '日', style: PLAIN_STYLE }, everywhere(4, 1));
+    const before = [...grid.chars];
+    writeSpan(grid, 1, 0, { text: 'x', style: PLAIN_STYLE }, { x0: 1, y0: 0, x1: 4, y1: 1 });
+    expect(grid.chars).toEqual(before);
+    writeSpan(grid, 0, 0, { text: 'x', style: PLAIN_STYLE }, { x0: 0, y0: 0, x1: 1, y1: 1 });
+    expect(grid.chars).toEqual(before);
+  });
 });

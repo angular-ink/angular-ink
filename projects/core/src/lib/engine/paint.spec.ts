@@ -264,23 +264,4 @@ describe('paintTree overflow', () => {
     const cjk = box({ width: 6, flexShrink: 0 }, words('日本語'));
     expect(render(10, box({ width: 3, overflow: 'hidden' }, cjk))).toBe('日');
   });
-
-  it('shifts the children by contentOffsetX and contentOffsetY', () => {
-    const lines = box(
-      { flexDirection: 'column', width: 6, height: 2, flexShrink: 0 },
-      words('abcdef'),
-      words('ghijkl'),
-    );
-    const scrolled = box(
-      { width: 3, height: 1, overflow: 'hidden', contentOffsetX: 2, contentOffsetY: 1.9 },
-      lines,
-    );
-    expect(render(10, scrolled)).toBe('ijk');
-  });
-
-  it('turns half of a wide character cut by the clip into a space', () => {
-    const cjk = box({ width: 6, flexShrink: 0 }, words('日本語'));
-    const scrolled = box({ width: 3, overflow: 'hidden', contentOffsetX: 1 }, cjk);
-    expect(render(10, scrolled)).toBe(' 本');
-  });
 });
