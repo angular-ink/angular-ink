@@ -97,9 +97,10 @@ class InkRenderer implements Renderer2 {
     node.text = value;
   }
 
-  listen(target: unknown, eventName: string): () => void {
-    const tag = typeof target === 'object' && target ? (target as InkNode).tag : String(target);
-    throw new Error(`angular-ink: unknown event "${eventName}" on <${tag}>`);
+  // Angular calls this for every template listener, component outputs included, and it cannot be
+  // told which is which. Outputs are delivered by the component, and a typo fails strictTemplates.
+  listen(): () => void {
+    return () => undefined;
   }
 
   private warnOnce(key: string, message: string): void {

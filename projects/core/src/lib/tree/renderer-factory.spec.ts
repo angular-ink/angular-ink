@@ -59,12 +59,16 @@ describe('InkRendererFactory', () => {
     expect(t.text).toBe('b');
   });
 
-  it('throws on listen with the event and tag', () => {
+  it('accepts listen for any event and returns an unsubscribe that does nothing', () => {
     const { r } = setup();
     const el = r.createElement('ink-text') as InkNode;
-    expect(() => r.listen(el, 'click', () => true)).toThrow(
-      'angular-ink: unknown event "click" on <ink-text>',
-    );
+    const handler = vi.fn(() => true);
+    const unsubscribe = r.listen(el, 'click', handler);
+    expect(() => {
+      unsubscribe();
+    }).not.toThrow();
+    expect(r.listen(el, 'ping', handler)).toBeTypeOf('function');
+    expect(handler).not.toHaveBeenCalled();
   });
 
   it.each(['setStyle', 'addClass', 'setProperty'] as const)(

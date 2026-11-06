@@ -45,7 +45,8 @@ frame per tick, so several change-detection cycles in a tick become one redraw.
 
 A `RendererFactory2` of our own runs in an `EnvironmentInjector` with no platform. Its
 `Renderer2` creates `InkNode`s for `ink-*` elements and text, moves them on `appendChild`,
-`insertBefore` and `removeChild`, and accepts only the angular-ink events in `listen`. Elements
+`insertBefore` and `removeChild`. Its `listen` does nothing, because Angular also calls it for
+component outputs, and those reach their handlers without the renderer. Elements
 are components that register as the owner of their node, so the engine reads typed props instead of
 parsing attributes.
 

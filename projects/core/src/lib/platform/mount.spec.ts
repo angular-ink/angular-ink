@@ -1,4 +1,5 @@
 import {
+  ApplicationRef,
   Component,
   DestroyRef,
   Injectable,
@@ -8,6 +9,7 @@ import {
   computed,
   inject,
   input,
+  output,
   signal,
   type OnDestroy,
 } from '@angular/core';
@@ -74,6 +76,7 @@ function mount(
   return { tree, onCommit, warn, handleError };
 }
 
+/* eslint-disable @angular-eslint/component-selector -- the selector a user's own app would have */
 describe('mountTree', () => {
   it('renders @if, @for and signals without a DOM', async () => {
     expect(typeof (globalThis as { document?: unknown }).document).toBe('undefined');
@@ -171,6 +174,34 @@ describe('mountTree', () => {
     }
     expect(() => mount(Cleanup, { inputs: { bad: 1 } })).toThrow('bad input');
     expect(destroyed).toHaveBeenCalledTimes(1);
+  });
+
+  it('delivers a child output to a handler in the parent template', () => {
+    const reached = vi.fn();
+    @Component({ selector: 'my-child', template: '' })
+    class MyChild {
+      static last: MyChild | undefined;
+      readonly ping = output();
+      constructor() {
+        MyChild.last = this;
+      }
+    }
+    @Component({
+      selector: 'my-parent',
+      imports: [MyChild],
+      template: `<my-child (ping)="x()" />`,
+    })
+    class MyParent {
+      x(): void {
+        reached();
+      }
+    }
+    const { tree, handleError } = mount(MyParent);
+    tree.injector.get(ApplicationRef).tick();
+    MyChild.last?.ping.emit();
+    expect(reached).toHaveBeenCalledTimes(1);
+    expect(handleError).not.toHaveBeenCalled();
+    tree.destroy();
   });
 
   it('exposes the MountedTree shape', () => {
