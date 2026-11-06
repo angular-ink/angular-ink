@@ -77,7 +77,8 @@ function build(
   measured: YogaNode[],
 ): Pending {
   const props = node.owner?.inkProps() ?? {};
-  if (holdsText(node.tag)) {
+  // Its line breaks take rows where it stands, as a text of its own does in Ink.
+  if (holdsText(node.tag) || node.tag === 'ink-newline') {
     return buildText(yoga, node, yogaNode, props, inherited, measured);
   }
   if (node.tag !== 'ink-root') {

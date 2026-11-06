@@ -17,7 +17,16 @@ const CACHE_CAPACITY = 2 ** 20;
  * parent box or text already applies, background included (INK-BOX-08, INK-TEXT-02).
  */
 export function squashText(textNode: InkNode, inherited: CellStyle): string {
-  return expandTabs(squashChildren(textNode, styleOf(textNode, inherited)));
+  return expandTabs(
+    newlineBreaks(textNode) ?? squashChildren(textNode, styleOf(textNode, inherited)),
+  );
+}
+
+/** The line breaks of an `ink-newline`, which has no child text node: its owner knows them. */
+function newlineBreaks(node: InkNode): string | null {
+  if (node.tag !== 'ink-newline') return null;
+  const owner = node.owner as { text?: unknown } | null;
+  return typeof owner?.text === 'function' ? String(owner.text.call(owner)) : null;
 }
 
 function squashChildren(node: InkNode, style: CellStyle): string {
@@ -30,9 +39,8 @@ function squashChildren(node: InkNode, style: CellStyle): string {
 }
 
 function squashElement(node: InkNode, style: CellStyle): string {
-  // ink-newline has no child text node; its owner knows the line breaks it stands for.
-  const owned = node.tag === 'ink-newline' ? (node.owner as { text?: unknown } | null)?.text : null;
-  if (typeof owned === 'function') return String(owned.call(node.owner));
+  const breaks = newlineBreaks(node);
+  if (breaks !== null) return breaks;
   const text = squashChildren(node, node.tag === 'ink-text' ? styleOf(node, style) : style);
   return applyNestedTransform(node, text);
 }

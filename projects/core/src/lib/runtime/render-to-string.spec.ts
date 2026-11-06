@@ -1,6 +1,6 @@
 import { Component, inject, input, PendingTasks, signal } from '@angular/core';
 import { describe, expect, it, vi } from 'vitest';
-import { InkBox, InkStatic, InkText } from '../elements';
+import { InkBox, InkNewline, InkStatic, InkText } from '../elements';
 import { injectApp, injectStderr, injectStdout, injectWindowSize } from './inject';
 import { renderInkToString } from './render-to-string';
 
@@ -153,6 +153,55 @@ class Loading {
     }, 5);
   }
 }
+
+describe('ink-newline outside ink-text', () => {
+  const textOf = (template: string) => {
+    @Component({ selector: 'ink-test-lines', imports: [InkBox, InkNewline, InkText], template })
+    class Lines {}
+    return Lines;
+  };
+
+  // Each value is what Ink 8.0.0 gives for the same tree: its Newline is a text of line breaks.
+  it('takes the lines of its breaks in a column', async () => {
+    const Lines = textOf(
+      `<ink-box flexDirection="column"><ink-text>a</ink-text><ink-newline /><ink-text>b</ink-text></ink-box>`,
+    );
+    expect(await renderInkToString(Lines)).toBe('a\n\n\nb');
+  });
+
+  it('reads its count', async () => {
+    const Two = textOf(
+      `<ink-box flexDirection="column"><ink-text>a</ink-text><ink-newline count="2" /><ink-text>b</ink-text></ink-box>`,
+    );
+    expect(await renderInkToString(Two)).toBe('a\n\n\n\nb');
+    const None = textOf(
+      `<ink-box flexDirection="column"><ink-text>a</ink-text><ink-newline count="0" /><ink-text>b</ink-text></ink-box>`,
+    );
+    expect(await renderInkToString(None)).toBe('a\nb');
+  });
+
+  // Followed by a line, because gridToString drops blank lines at the end of a frame.
+  it('adds height and no width in a row', async () => {
+    const Row = textOf(
+      `<ink-box><ink-text>a</ink-text><ink-newline /><ink-text>b</ink-text></ink-box><ink-text>c</ink-text>`,
+    );
+    expect(await renderInkToString(Row)).toBe('ab\n\nc');
+  });
+
+  it('counts at the end of a column and at the root', async () => {
+    const Last = textOf(
+      `<ink-box flexDirection="column"><ink-text>a</ink-text><ink-newline /></ink-box><ink-text>c</ink-text>`,
+    );
+    expect(await renderInkToString(Last)).toBe('a\n\n\nc');
+    const Root = textOf(`<ink-newline /><ink-text>c</ink-text>`);
+    expect(await renderInkToString(Root)).toBe('\n\nc');
+  });
+
+  it('still breaks the line inside ink-text', async () => {
+    const Inside = textOf(`<ink-text>a<ink-newline />b</ink-text>`);
+    expect(await renderInkToString(Inside)).toBe('a\nb');
+  });
+});
 
 describe('renderInkToString and pending tasks', () => {
   it('waits for the app to be stable (INK-R2S-04)', async () => {
