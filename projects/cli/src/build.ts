@@ -8,8 +8,8 @@ import {
   type ParsedConfiguration,
 } from '@angular/compiler-cli';
 import { build, formatMessages } from 'esbuild';
-import { existsSync, rmSync } from 'node:fs';
-import { chmod, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { chmod, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import ts from 'typescript';
 import { linkerPlugin } from './linker-plugin.js';
@@ -145,11 +145,11 @@ async function esbuildTsconfig(
   return { tsconfig: path };
 }
 
-const SIGNAL_EXIT_CODES: Readonly<Record<string, number>> = {
-  SIGINT: 130,
-  SIGTERM: 143,
-  SIGHUP: 129,
-};
+const SIGNAL_EXIT_CODES: readonly (readonly [NodeJS.Signals, number])[] = [
+  ['SIGINT', 130],
+  ['SIGTERM', 143],
+  ['SIGHUP', 129],
+];
 
 /**
  * Removes `folder` if a signal ends the build, and returns how to stop watching. The compiler runs
@@ -157,7 +157,7 @@ const SIGNAL_EXIT_CODES: Readonly<Record<string, number>> = {
  * its own listener decides when it ends.
  */
 function removeOnSignal(folder: string): () => void {
-  const listeners = Object.entries(SIGNAL_EXIT_CODES).map(([signal, code]) => {
+  const listeners = SIGNAL_EXIT_CODES.map(([signal, code]) => {
     const listener = (): void => {
       rmSync(folder, { recursive: true, force: true });
       if (process.listenerCount(signal) === 1) process.exit(code);
@@ -186,7 +186,8 @@ export async function buildCli(options: BuildCliOptions): Promise<BuildCliResult
     commonFolder(tsconfig === undefined ? cwd : dirname(tsconfig), entry);
 
   // Under the cwd, so the emitted files find the same node_modules as their sources.
-  const outDir = await mkdtemp(join(cwd, '.angular-ink-build-'));
+  // Synchronous, so that no signal can end the process between creating it and watching for signals.
+  const outDir = mkdtempSync(join(cwd, '.angular-ink-build-'));
   const stopWatchingSignals = removeOnSignal(outDir);
   try {
     const projectOptions = config?.options ?? DEFAULT_COMPILER_OPTIONS;
