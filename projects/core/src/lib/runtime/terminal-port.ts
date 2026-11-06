@@ -31,7 +31,7 @@ interface OutputStream extends Omit<NodeJS.WritableStream, 'writable'> {
 }
 
 interface QueuedWrite {
-  readonly data: string;
+  readonly data: string | Uint8Array;
   readonly resolve: () => void;
 }
 
@@ -85,11 +85,7 @@ class StreamAdapter implements StreamPort {
   }
 
   write(data: string): Promise<void> {
-    if (this.isClosed()) return Promise.resolve();
-    return new Promise((resolve) => {
-      this.queue.push({ data, resolve });
-      if (this.current === null) this.sendNext();
-    });
+    return this.enqueue(data);
   }
 
   writeNow(data: string): void {
@@ -99,14 +95,15 @@ class StreamAdapter implements StreamPort {
       return;
     }
     const queued = this.queue.splice(0);
-    const bytes = Buffer.from(queued.map((item) => item.data).join('') + data);
+    const bytes = Buffer.concat([...queued.map((item) => toBytes(item.data)), toBytes(data)]);
     let offset = 0;
     try {
       while (offset < bytes.length) offset += writeSync(this.stream.fd, bytes, offset);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'EAGAIN') {
-        // A full non-blocking pipe: the stream can still take the rest later.
-        void this.write(bytes.subarray(offset).toString());
+        // A full non-blocking pipe: the stream can still take the rest later. As bytes, because the
+        // pipe can fill in the middle of a character.
+        void this.enqueue(bytes.subarray(offset));
       } else {
         this.close();
       }
@@ -117,6 +114,14 @@ class StreamAdapter implements StreamPort {
   dispose(): void {
     this.disposed = true;
     this.release();
+  }
+
+  private enqueue(data: string | Uint8Array): Promise<void> {
+    if (this.isClosed()) return Promise.resolve();
+    return new Promise((resolve) => {
+      this.queue.push({ data, resolve });
+      if (this.current === null) this.sendNext();
+    });
   }
 
   private isClosed(): boolean {
@@ -185,6 +190,10 @@ class StreamAdapter implements StreamPort {
     this.stream.off('error', this.handleClosed);
     this.stream.off('close', this.handleClosed);
   }
+}
+
+function toBytes(data: string | Uint8Array): Uint8Array {
+  return typeof data === 'string' ? Buffer.from(data) : data;
 }
 
 function positive(value: number | undefined, fallback: number): number {

@@ -3,8 +3,18 @@ import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Writable } from 'node:stream';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createStreamPort } from './terminal-port';
+
+const fs = vi.hoisted(() => ({ writeSync: null as null | ((...args: unknown[]) => number) }));
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return {
+    ...actual,
+    writeSync: (...args: Parameters<typeof actual.writeSync>) =>
+      fs.writeSync === null ? actual.writeSync(...args) : fs.writeSync(...args),
+  };
+});
 
 type Done = (error?: Error | null) => void;
 
@@ -258,6 +268,39 @@ describe('createStreamPort', () => {
       }).not.toThrow();
       expect(onClosed).toHaveBeenCalledTimes(1);
       port.dispose();
+    });
+
+    describe('on a full pipe', () => {
+      afterEach(() => {
+        fs.writeSync = null;
+      });
+
+      it('sends the rest as bytes, even when the pipe filled inside a character', async () => {
+        const chunks: Buffer[] = [];
+        const stream = Object.assign(
+          new Writable({
+            write(chunk: Buffer, _encoding, done) {
+              chunks.push(chunk);
+              done();
+            },
+          }),
+          { fd: 99 },
+        );
+        const taken: number[] = [];
+        // Takes the first byte of "é", then the pipe is full.
+        fs.writeSync = (_fd, bytes, offset) => {
+          if (taken.length > 0) {
+            throw Object.assign(new Error('full'), { code: 'EAGAIN' });
+          }
+          taken.push((bytes as Buffer)[offset as number]!);
+          return 1;
+        };
+        const port = createStreamPort(stream, vi.fn());
+        port.writeNow('é!');
+        await tick();
+        expect(Buffer.concat([Buffer.from(taken), ...chunks]).toString()).toBe('é!');
+        port.dispose();
+      });
     });
 
     it('writes nothing after the stream closed', () => {
