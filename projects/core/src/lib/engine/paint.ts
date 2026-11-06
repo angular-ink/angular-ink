@@ -1,7 +1,7 @@
 import { parseAnsi, PLAIN_STYLE } from './ansi';
 import { borderWidths, paintBorder, type Sides } from './borders';
 import { parseColor } from './color';
-import { createGrid, writeSpan, writeSpans, type CellGrid, type Clip } from './grid';
+import { createGrid, internStyle, writeSpan, writeSpans, type CellGrid, type Clip } from './grid';
 import type { LayoutBox } from './layout';
 import { holdsText } from '../tree/node';
 
@@ -12,6 +12,7 @@ export function paintTree(root: LayoutBox): CellGrid {
   const grid = createGrid(root.width, root.height);
   const everywhere: Clip = { x0: 0, y0: 0, x1: root.width, y1: root.height };
   paintBox(grid, root, 0, 0, everywhere);
+  loseSharedIntensity(grid);
   return grid;
 }
 
@@ -22,7 +23,38 @@ export function paintStatic(root: LayoutBox): CellGrid | null {
   const grid = createGrid(layer.columns, layer.rows);
   const everywhere: Clip = { x0: 0, y0: 0, x1: layer.columns, y1: layer.rows };
   paintBox(grid, layer.box, 0, 0, everywhere);
+  loseSharedIntensity(grid);
   return grid;
+}
+
+/**
+ * Bold and dim end with the same code. Ink's output uses it to end one of them while the other goes
+ * on, and thinks that one is still open, so a terminal shows it off until it really ends. A user
+ * sees that on the stack of the error overview, so the cells say the same here.
+ */
+function loseSharedIntensity(grid: CellGrid): void {
+  for (let y = 0; y < grid.rows; y++) {
+    let previous = PLAIN_STYLE;
+    let dimLost = false;
+    let boldLost = false;
+    for (let index = y * grid.columns; index < (y + 1) * grid.columns; index++) {
+      const style = grid.styles[index] ?? PLAIN_STYLE;
+      if (previous.bold && previous.dim) {
+        if (style.dim && !style.bold) dimLost = true;
+        if (style.bold && !style.dim) boldLost = true;
+      }
+      if (!style.dim) dimLost = false;
+      if (!style.bold) boldLost = false;
+      if (dimLost || boldLost) {
+        grid.styles[index] = internStyle({
+          ...style,
+          dim: style.dim && !dimLost,
+          bold: style.bold && !boldLost,
+        });
+      }
+      previous = style;
+    }
+  }
 }
 
 /** `offsetX` and `offsetY` are the absolute position of the parent, which Yoga's x and y add to. */

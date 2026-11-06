@@ -265,3 +265,52 @@ describe('paintTree overflow', () => {
     expect(render(10, box({ width: 3, overflow: 'hidden' }, cjk))).toBe('日');
   });
 });
+
+describe('paintTree where a bold run ends on a dim one', () => {
+  const styled = (props: Record<string, unknown>, content: string) => text(props, literal(content));
+
+  // The output of Ink ends the bold with a code that ends the dim too, and never opens it again.
+  it('loses the dim until the dim ends', () => {
+    const { styles } = paint(
+      40,
+      box(
+        {},
+        styled({ dimColor: true, bold: true }, 'a'),
+        styled({ dimColor: true }, 'b'),
+        styled({}, 'c'),
+        styled({ dimColor: true }, 'd'),
+      ),
+    );
+    expect(styles[0]).toMatchObject({ dim: true, bold: true });
+    expect(styles[1]).toMatchObject({ dim: false, bold: false });
+    expect(styles[3]).toMatchObject({ dim: true });
+  });
+
+  it('loses the bold the same way when the dim ends first', () => {
+    const { styles } = paint(
+      40,
+      box({}, styled({ dimColor: true, bold: true }, 'a'), styled({ bold: true }, 'b')),
+    );
+    expect(styles[1]).toMatchObject({ dim: false, bold: false });
+  });
+
+  it('keeps the dim that opens after a bold has closed', () => {
+    const { styles } = paint(
+      40,
+      box({}, styled({ bold: true }, 'a'), styled({ dimColor: true }, 'b')),
+    );
+    expect(styles[1]).toMatchObject({ dim: true, bold: false });
+  });
+
+  it('starts each row again', () => {
+    const { styles } = paint(
+      1,
+      box(
+        { flexDirection: 'column' },
+        styled({ dimColor: true, bold: true }, 'a'),
+        styled({ dimColor: true }, 'b'),
+      ),
+    );
+    expect(styles[1]).toMatchObject({ dim: true });
+  });
+});

@@ -188,12 +188,12 @@ describe('paintErrorOverview', () => {
       expect(text).toContain('-     at native');
     });
 
-    it('draw the dash dim, the name dim and bold, and the place dim and gray', () => {
+    it('draw the dash dim, the name dim and bold, and the place gray, its dim lost as in Ink', () => {
       const grid = paintErrorOverview(stackError(), 80, yoga);
       expect(styleAt(grid, '- run')).toMatchObject({ dim: true, bold: false, fg: null });
       expect(styleAt(grid, 'run (')).toMatchObject({ dim: true, bold: true, fg: null });
       expect(styleAt(grid, '(/a/b.js')).toMatchObject({
-        dim: true,
+        dim: false,
         bold: false,
         fg: parseColor('gray'),
       });
