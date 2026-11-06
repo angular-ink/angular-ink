@@ -1,6 +1,7 @@
-import { Component, input } from '@angular/core';
+import { Component, ElementRef, inject, input } from '@angular/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InkBox, InkStatic, InkText, type InkBoxStyle } from '../elements';
+import { createNode, type InkNode } from '../tree/node';
 import { renderInk } from './render-ink';
 import { cleanup, FakeStderr, FakeStdout, renderForTest } from '../../../../testing/src/public-api';
 
@@ -135,6 +136,20 @@ class SelfHidden {}
 })
 class BadItem {}
 
+/** Deeper than any recursive walk of the tree can go, hung directly on the host node. */
+@Component({ selector: 'ink-test-bottomless', template: '' })
+class Bottomless {
+  constructor() {
+    let parent = inject(ElementRef).nativeElement as InkNode;
+    for (let depth = 0; depth < 200_000; depth++) {
+      const child = createNode('element', 'ink-box');
+      child.parent = parent;
+      parent.children.push(child);
+      parent = child;
+    }
+  }
+}
+
 const occurrences = (text: string, part: string): number => text.split(part).length - 1;
 
 function fakeStreams(isTty: boolean): { stdout: FakeStdout; stderr: FakeStderr } {
@@ -229,6 +244,11 @@ describe('ink-static', () => {
     await expect(test.waitUntilExit()).rejects.toThrow('must be inside <ink-text>');
   });
 
+  it('reports a tree that is too deep with the nesting error', async () => {
+    const test = await renderForTest(Bottomless);
+    await expect(test.waitUntilExit()).rejects.toThrow(/^angular-ink: nesting deeper than 256/);
+  });
+
   it('does not repeat its output on unmount (INK-COMP-07)', async () => {
     const test = await renderForTest(Log, { inputs: { items: ['a'] } });
     test.unmount();
@@ -264,6 +284,49 @@ describe('ink-static on a terminal', () => {
     app.unmount();
     await app.waitUntilExit();
     expect(written(stdout)).not.toContain(':');
+  });
+
+  it('writes an item once while the live frame changes and the items stay (INK-COMP-04)', async () => {
+    const { stdout, stderr } = fakeStreams(true);
+    const items = ['a'];
+    const app = await renderInk(Log, {
+      stdout,
+      stderr,
+      interactive: true,
+      patchConsole: false,
+      inputs: { items },
+    });
+    await app.waitUntilRenderFlush();
+    // All different letters, since the diff writes only the cells that change.
+    for (const live of ['mmm', 'nnn']) {
+      app.rerender({ live, items });
+      await app.waitUntilRenderFlush();
+      expect(written(stdout)).toContain(live);
+    }
+    app.unmount();
+    await app.waitUntilExit();
+    expect(occurrences(written(stdout), '0:a')).toBe(1);
+  });
+
+  it('writes an item once when two live changes land in the same tick', async () => {
+    const { stdout, stderr } = fakeStreams(true);
+    const app = await renderInk(Log, {
+      stdout,
+      stderr,
+      interactive: true,
+      patchConsole: false,
+      inputs: { items: ['a'] },
+    });
+    await app.waitUntilRenderFlush();
+    app.rerender({ items: ['a', 'b'], live: 'mmm' });
+    app.rerender({ live: 'nnn' });
+    await app.waitUntilRenderFlush();
+    app.unmount();
+    await app.waitUntilExit();
+    const bytes = written(stdout);
+    expect(bytes).toContain('nnn');
+    expect(occurrences(bytes, '0:a')).toBe(1);
+    expect(occurrences(bytes, '1:b')).toBe(1);
   });
 
   it('is not lost when the frame of its commit is throttled', async () => {

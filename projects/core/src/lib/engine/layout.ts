@@ -59,13 +59,12 @@ export function layoutTree(root: InkNode, columns: number, yoga: Yoga): LayoutBo
 /** Every `ink-static` of the tree in document order, even the ones under `display: none`. */
 export function findStaticNodes(root: InkNode): readonly InkNode[] {
   const found: InkNode[] = [];
-  const visit = (node: InkNode): void => {
-    for (const child of node.children) {
-      if (child.tag === 'ink-static') found.push(child);
-      else visit(child);
-    }
-  };
-  visit(root);
+  // Runs on the raw tree, before flatten can reject one that is too deep, so it must not recurse.
+  const pending = [...root.children].reverse();
+  for (let node = pending.pop(); node !== undefined; node = pending.pop()) {
+    if (node.tag === 'ink-static') found.push(node);
+    else for (const child of [...node.children].reverse()) pending.push(child);
+  }
   return found;
 }
 

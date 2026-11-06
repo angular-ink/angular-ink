@@ -32,8 +32,9 @@ class DiscardingStream extends Writable {
 
 /**
  * Renders `component` once, at the size of a virtual terminal, and returns the first stable frame
- * as plain text, after any `ink-static` output. Nothing reaches the real streams and no listener outlives the call. The terminal
- * functions of the app do nothing here, and an error from the render rejects after the cleanup.
+ * as plain text, after any `ink-static` output. Nothing reaches the real streams and no listener
+ * outlives the call. The terminal functions of the app do nothing here, and an error from the
+ * render rejects after the cleanup.
  */
 export async function renderInkToString<T>(
   component: Type<T>,

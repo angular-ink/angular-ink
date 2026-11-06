@@ -15,6 +15,12 @@ Items that change behavior need a design update first (`AGENTS.md`).
 | 1.0     | 8      | plus project creation and examples; API frozen |
 | 1.x     | 9      | ecosystem                       |
 
+## Known gaps with Ink in 0.1
+
+- An `ink-static` nested inside another `ink-static` is dropped; Ink paints it.
+- The string an `ink-transform` receives closes its colors with `\x1b[0m`, where Ink's has chalk's
+  own close codes such as `\x1b[39m`. A transform that matches exact close codes behaves differently.
+
 ## Phase 4: advanced terminal features (0.4)
 
 - Incremental rendering and a render throttle (frames per second).

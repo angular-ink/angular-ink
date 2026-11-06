@@ -1,6 +1,6 @@
 import { loadYoga, type Yoga } from 'yoga-layout/load';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-import { layoutTree, type LayoutBox } from './layout';
+import { findStaticNodes, layoutTree, type LayoutBox } from './layout';
 import { createNode, type InkNode } from '../tree/node';
 
 let yoga: Yoga;
@@ -92,6 +92,15 @@ describe('layoutTree root', () => {
     expect(layout.staticLayer?.rows).toBe(3);
     expect(layout.children[0]?.children).toEqual([]);
     expect(layout.children[0]?.staticLayer).toBeUndefined();
+  });
+
+  it('finds every ink-static in document order, at any depth', () => {
+    const first = element('ink-static', {});
+    const second = element('ink-static', {});
+    const third = element('ink-static', {});
+    let deep = box({}, second);
+    for (let depth = 0; depth < 200_000; depth++) deep = box({}, deep);
+    expect(findStaticNodes(rootNode(box({}, first), deep, third))).toEqual([first, second, third]);
   });
 
   it('has no layer for an ink-static that is hidden, or for the one after it', () => {
