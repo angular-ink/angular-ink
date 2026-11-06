@@ -11,9 +11,8 @@ Tests are written first and must fail without the change they cover (see `AGENTS
 | Level       | What it proves                                                                  | Tool                                       | Where                  |
 | ----------- | ------------------------------------------------------------------------------- | ------------------------------------------ | ---------------------- |
 | Unit        | One stage, from its input data to its output data                               | Vitest (node)                              | `lib/**/*.spec.ts`     |
-| Property    | Invariants hold for any input, such as the parser and the width of cut text     | Vitest + `fast-check`                      | `*.property.spec.ts`   |
 | Component   | Real templates (control flow, DI) build the right tree and frame                | Vitest + Angular compiler                  | `elements/*.spec.ts`   |
-| Integration | A whole app renders to a virtual terminal                                       | Vitest + `@angular-ink/testing`            | `runtime/*.spec.ts`    |
+| Integration | A whole app renders on fake streams                                             | Vitest + `@angular-ink/testing`            | `runtime/*.spec.ts`    |
 | End to end  | The built CLI in a pseudo-terminal, compared with expected screens              | `scripts/e2e.mjs`                          | `e2e/`                 |
 | Parity      | The same app on Ink and on angular-ink gives the same frames                    | `parity/run.mjs`                           | `parity/`              |
 
@@ -168,7 +167,7 @@ has `timeout-minutes`, and no workflow uses `pull_request_target`.
   `overrides` entry in `package.json` (`minimatch` and `qs` are), and the override goes when the
   tool ships the fix itself.
 - **Terminal safety:** the process-exit tests (signals, uncaught errors, closed stdout) are part of
-  the gate once the runtime exists.
+  the gate.
 
 ## Releases
 

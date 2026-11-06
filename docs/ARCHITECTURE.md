@@ -10,13 +10,13 @@ this project calls for it. Where the simplest correct answer is no pattern, this
  app component (Angular)
    │  InkRendererFactory2        Adapter: Angular's Renderer2 calls → InkNode tree
    ▼
- InkNode tree                    plain data, styles resolved
+ InkNode tree                    plain data; each element's owner holds its props
    │  layout (Yoga, unit = cell)
    ▼
  LayoutBox tree                  positions and sizes in cells
    │  paint
    ▼
- CellGrid                        char, width, fg, bg and attributes per cell
+ CellGrid                        a character and a style per cell; a wide character's second cell is ''
    │  diff against the previous grid
    ▼
  changes
@@ -27,7 +27,7 @@ this project calls for it. Where the simplest correct answer is no pattern, this
 
 ```
  stdin (raw mode)
-   │  KeyParser                  state machine: keys, arrows, F-keys, modifiers, paste, mouse
+   │  KeyParser                  state machine: keys, arrows, F-keys, modifiers, paste
    ▼
  InputBus
    │  FocusManager               who receives the key
@@ -54,13 +54,14 @@ parsing attributes.
 
 Each stage after the tree is a function from readonly data to readonly data: layout, paint, diff
 and the ANSI writer. A stage is tested on its own output. The previous grid is the only state
-carried between frames, and the scheduler owns it.
+carried between frames, and `FrameLog` (`runtime/log.ts`) owns it.
 
 ### Port/Adapter on the output: `TerminalPort`
 
-`TerminalPort` (`write`, `columns`, `rows`, `onResize`) has one adapter for `process.stdout` and one
-for the virtual terminal in `@angular-ink/testing`. The virtual terminal is the same `CellGrid` as
-the engine's, so a test sees exactly what a user would.
+`TerminalPort` (`write`, `columns`, `rows`, `onResize`) has one adapter, for a Node stream
+(`createStreamPort`). `@angular-ink/testing` needs no other: `renderForTest` gives the app fake
+streams and takes each `CellGrid` through the internal `ɵframeSink` option, so a test reads the grid
+the engine painted, before the diff and the writer.
 
 ### State machine: `KeyParser`
 
@@ -82,8 +83,9 @@ classes. Recursion stops at `MAX_DEPTH`.
 
 - **Data between stages is readonly.** Use `readonly` fields and `ReadonlyMap` in the types. A stage
   returns new data.
-- **No module-level mutable state in the engine**, apart from the memoised Yoga loader. Every app
-  is isolated.
+- **Module-level state is limited to caches.** These are the memoised Yoga loader, Yoga's enum
+  tables (`yoga-map.ts`), the wrap cache (`text-layout.ts`) and the interned styles (`grid.ts`). Each
+  entry follows from its key, so apps that share them still get the frames they would get alone.
 - **Errors.** Invalid input in a template, such as text outside `ink-text`, throws an `Error` whose
   message starts `angular-ink:` and names the element and the value. What can be drawn anyway is
   drawn, and gets one development-mode warning per render.

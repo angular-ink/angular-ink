@@ -1,14 +1,14 @@
 # Roadmap
 
-What angular-ink leaves for later. Version 0.1 covers the core render, layout and inline output,
-the testing library and the CLI build. The phases below follow the parity plan with Ink 8.0.0.
+What angular-ink leaves for later. The phases follow the parity plan with Ink 8.0.0. Version 0.1
+covers phases 0 to 3: the render, layout and inline output, keyboard, paste and focus, the testing
+library and the CLI build. It also brings forward from phase 4 the render throttle (`maxFps`),
+synchronized output, `injectWindowSize` and `ink-transform`. The later versions keep their numbers.
 Items that change behavior need a design update first (`AGENTS.md`).
 
 | Version | Phases | Parity (core and testing items) |
 | ------- | ------ | ------------------------------- |
-| 0.1     | 0, 1   | about 45%                       |
-| 0.2     | 2      | about 65%                       |
-| 0.3     | 3      | about 70%                       |
+| 0.1     | 0 to 3 | about 70%                       |
 | 0.4     | 4      | about 90%                       |
 | 0.5     | 5, 6   | all of the core and testing     |
 | 0.6     | 7      | plus `@inkjs/ui` 2.0.0          |
@@ -23,17 +23,16 @@ Items that change behavior need a design update first (`AGENTS.md`).
 
 ## Phase 4: advanced terminal features (0.4)
 
-- Incremental rendering and a render throttle (frames per second).
+- Incremental rendering.
 - Alternate screen.
-- Synchronized output.
 - Kitty keyboard protocol.
 - Windows console support.
 - Suspending the terminal: `injectApp().suspendTerminal(async () => …)`, also with `await using`.
 - Cursor position and IME support, applied at the end of the render cycle.
 - Animation: a shared timer service and `injectAnimation()` returning a signal.
-- Window size and measurement helpers.
+- Measurement helpers.
 - Scrolling with `contentOffsetX` and `contentOffsetY`.
-- `ink-transform` and hyperlinks.
+- Hyperlinks.
 
 Done when the `alternate-screen`, `incremental-rendering`, `render-throttle`, `scroll`,
 `cursor-ime`, `suspend-terminal` and `subprocess-output` examples match Ink in the parity harness,

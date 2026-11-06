@@ -1,6 +1,5 @@
-@angular-ink/core reads key sequences with a mapping that follows the one in Ink, which Ink copied
-from Enquirer (projects/core/src/lib/input/key.ts in the source). Terminal key codes are the same
-for everyone, and parity with Ink requires the same names for them. Their licenses follow.
+The key table in @angular-ink/core (src/lib/input/key.ts) follows the one in Ink, which Ink copied
+from Enquirer. Their licenses follow.
 
 --------------------------------------------------------------------------------
 Ink 8.0.0 (https://github.com/vadimdemedes/ink)

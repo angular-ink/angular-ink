@@ -33,6 +33,9 @@ harness compares apps instead).
 `[style.x]`, `class` and component CSS have no effect and warn in development. Style comes from
 the inputs.
 
+A non-interactive app (`interactive: false`, CI, or a stdout that is not a TTY) gets no keys, even
+with a TTY on stdin.
+
 Also open in 0.1:
 
 - An `ink-static` nested inside another `ink-static` is dropped. Ink paints it.

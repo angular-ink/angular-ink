@@ -4,17 +4,19 @@ Build terminal apps with Angular components. Own engine, Ink-inspired API; this 
 
 A terminal app is a normal Angular component whose template uses the `ink-*` elements. angular-ink
 lays the tree out with Yoga, paints it into a grid of cells and writes only the cells that changed.
-Keyboard, focus and paste come as signals. There is no React and no Ink in the runtime.
+Keyboard and paste arrive through callbacks, and focus is a signal. There is no React and no Ink in
+the runtime.
 
 ## Install
 
 ```sh
 npm install @angular-ink/core
-npm install --save-dev @angular-ink/testing angular-ink @angular/compiler-cli typescript
+npm install --save-dev @angular-ink/testing angular-ink @angular/compiler-cli typescript @types/node
 ```
 
-It needs `@angular/core` 22 or newer, zoneless, and Node 22 or newer. The `angular-ink` command
-needs Node `^22.18.0` or `>=24.11.0`, because it depends on Babel 8.
+It needs `@angular/core` 22, zoneless, and Node 22 or newer. The published types use `NodeJS.*`, so
+a TypeScript project also needs `@types/node`. The `angular-ink` command needs Node `^22.18.0` or
+`>=24.11.0`, because it depends on Babel 8.
 
 ## Example
 
@@ -85,6 +87,9 @@ harness compares apps instead).
 
 `[style.x]`, `class` and component CSS have no effect and warn in development. Style comes from
 the inputs.
+
+A non-interactive app (`interactive: false`, CI, or a stdout that is not a TTY) gets no keys, even
+with a TTY on stdin.
 
 Also open in 0.1:
 
