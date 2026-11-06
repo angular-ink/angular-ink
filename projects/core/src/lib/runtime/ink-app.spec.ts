@@ -102,3 +102,23 @@ describe('InkApp', () => {
     await app.waitUntilExit();
   });
 });
+
+describe('InkApp when the process ends after the app failed', () => {
+  it('draws no frame of the tree that failed', async () => {
+    const on = vi.spyOn(process, 'on');
+    const { app, stdout } = newApp();
+    stdout.rows = 1;
+    app.render(Label, {});
+    await app.waitUntilRenderFlush();
+    expect(stdout.text).toContain('one');
+    const before = stdout.text.length;
+    (app as unknown as { crash: Error }).crash = new Error('failed');
+    const onExit = on.mock.calls.find(([event]) => event === 'exit')?.[1] as () => void;
+    onExit();
+    await new Promise((resolve) => {
+      stdout.write('', resolve);
+    });
+    expect(stdout.text.slice(before)).not.toContain('\x1b[1;1H');
+    app.unmount();
+  });
+});

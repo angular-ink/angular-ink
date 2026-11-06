@@ -109,6 +109,8 @@ export class InkApp implements InkRuntime {
   private removeExitHooks: (() => void) | null = null;
   private beforeExit: (() => void) | null = null;
   private hasWrittenStatic = false;
+  /** A resize came during a write, and the frame that waits for the write has to know. */
+  private resizeOwed = false;
 
   constructor(private readonly options: InkAppOptions) {
     this.stdout = options.stdout;
@@ -487,13 +489,16 @@ export class InkApp implements InkRuntime {
 
   private drawFrame(moment?: FrameMoment): void {
     if (this.phase !== 'running' || this.crash !== null || this.portClosed) return;
+    if (moment?.resized === true) this.resizeOwed = true;
     if (this.writing) {
       // Layout waits too: when the write ends, the frame shows the newest state, once.
       this.frameWaitsForWrite = true;
       return;
     }
     const grid = this.paint();
-    if (grid !== null) this.show(grid, moment);
+    if (grid === null) return;
+    this.show(grid, this.resizeOwed ? { ...moment, resized: true } : moment);
+    this.resizeOwed = false;
   }
 
   private paint(): CellGrid | null {
@@ -537,17 +542,21 @@ export class InkApp implements InkRuntime {
     if (this.crash === null) this.runChangeDetection();
     let grid = this.crash === null ? this.paint() : null;
     if (this.crash !== null) grid = this.paintOverview(this.crash);
-    if (grid === null) return;
-    if (this.drawsInPlace && this.log.isClearedFrame(grid)) return;
-    this.show(grid, { unmounting });
+    this.showLastFrame(grid, unmounting);
   }
 
   // A process that ends with the app still running gets the same last frame as an unmount, only
   // with no change detection: there is no more time for an app that may be why it is dying.
   private drawLastFrameOnExit(): void {
-    if (this.phase !== 'running' || this.portClosed || !this.drawsInPlace) return;
-    const grid = this.paint();
-    if (grid !== null) this.show(grid, { unmounting: this.lastFrameRedraws() });
+    if (this.phase !== 'running' || this.portClosed || this.crash !== null) return;
+    if (this.drawsInPlace) this.showLastFrame(this.paint(), this.lastFrameRedraws());
+  }
+
+  // A frame that clear() took away stays away: the app asked for a clean terminal.
+  private showLastFrame(grid: CellGrid | null, unmounting: boolean): void {
+    if (grid === null) return;
+    if (this.drawsInPlace && this.log.isClearedFrame(grid)) return;
+    this.show(grid, { unmounting });
   }
 
   // After static output Ink draws a last frame only if one is pending, or static rows would repeat.

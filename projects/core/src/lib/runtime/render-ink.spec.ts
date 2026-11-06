@@ -10,7 +10,7 @@ import {
 import xterm from '@xterm/headless';
 import { PassThrough, Writable } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { InkBox, InkText } from '../elements';
+import { InkBox, InkStatic, InkText } from '../elements';
 import { injectApp, injectStderr, injectStdout, injectWindowSize } from './inject';
 import { renderInk, type Instance, type RenderOptions } from './render-ink';
 
@@ -1195,5 +1195,132 @@ describe('renderInk when the process ends with the app still running', () => {
     expect(stdout.output.slice(before)).toContain('\x1b[1;1H\x1b[J');
     expect(stdout.output.endsWith('\x1b[?25h')).toBe(true);
     app.unmount();
+  });
+
+  it('does not bring back a frame that clear() took away', async () => {
+    const on = vi.spyOn(process, 'on');
+    const stdout = new FakeTerminal(10, 3);
+    const app = await renderInk(Hello, {
+      stdout,
+      stdin: new PassThrough(),
+      interactive: true,
+      patchConsole: false,
+    });
+    await app.waitUntilRenderFlush();
+    app.clear();
+    await app.waitUntilRenderFlush();
+    const before = stdout.output.length;
+    const onExit = on.mock.calls.find(([event]) => event === 'exit')?.[1] as () => void;
+    onExit();
+    await new Promise((resolve) => {
+      stdout.write('', resolve);
+    });
+    expect(stdout.output.slice(before)).not.toContain('hello');
+    app.unmount();
+  });
+});
+
+describe('renderInk and the last frame of an app with static output', () => {
+  @Component({
+    imports: [InkStatic, InkText],
+    template: `
+      <ink-static [items]="items()">
+        <ng-template let-item>
+          <ink-text>{{ item }}</ink-text>
+        </ng-template>
+      </ink-static>
+      <ink-text>a{{ '\\n' }}b{{ '\\n' }}{{ last() }}</ink-text>
+    `,
+  })
+  class FillingAfterStatic {
+    static current: FillingAfterStatic;
+    readonly items = input<readonly string[]>([]);
+    readonly last = signal('c');
+    constructor() {
+      FillingAfterStatic.current = this;
+    }
+  }
+
+  const HOME_AND_ERASE = '\x1b[1;1H\x1b[J';
+
+  async function outputOfUnmount(
+    items: readonly string[],
+    beforeUnmount: () => Promise<void> = () => Promise.resolve(),
+  ): Promise<string> {
+    const stdout = new FakeTerminal(10, 3);
+    // One frame per second: a change after the first frame stays pending.
+    const instance = await render(FillingAfterStatic, {
+      stdout,
+      stdin: new PassThrough(),
+      inputs: { items },
+      maxFps: 1,
+      patchConsole: false,
+    });
+    await beforeUnmount();
+    const before = stdout.output.length;
+    instance.unmount();
+    await instance.waitUntilExit();
+    return stdout.output.slice(before);
+  }
+
+  it('draws a frame that fills the screen again without static output', async () => {
+    expect(await outputOfUnmount([])).toContain(HOME_AND_ERASE);
+  });
+
+  it('does not, after static output, with nothing pending', async () => {
+    expect(await outputOfUnmount(['kept'])).not.toContain(HOME_AND_ERASE);
+  });
+
+  it('does, after static output, with a frame pending', async () => {
+    const output = await outputOfUnmount(['kept'], async () => {
+      FillingAfterStatic.current.last.set('d');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(output).toContain(HOME_AND_ERASE);
+  });
+});
+
+describe('renderInk when the terminal resizes during a write', () => {
+  it('still draws an overflowing frame again once the write ends', async () => {
+    const held: (() => void)[] = [];
+    const stdout = new FakeTerminal(10, 2);
+    const write = stdout._write.bind(stdout);
+    let holding = false;
+    stdout._write = (chunk, encoding, done) => {
+      if (holding) {
+        held.push(() => {
+          write(chunk, encoding, done);
+        });
+      } else {
+        write(chunk, encoding, done);
+      }
+    };
+    @Component({
+      imports: [InkText],
+      template: `<ink-text>a{{ '\\n' }}b{{ '\\n' }}c{{ '\\n' }}d{{ '\\n' }}{{ last() }}</ink-text>`,
+    })
+    class Overflowing {
+      static current: Overflowing;
+      readonly last = signal('e');
+      constructor() {
+        Overflowing.current = this;
+      }
+    }
+    const instance = await render(Overflowing, {
+      stdout,
+      stdin: new PassThrough(),
+      patchConsole: false,
+    });
+    holding = true;
+    Overflowing.current.last.set('f');
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(held).toHaveLength(1);
+    // The frame is the same for the new height, so only the resize asks for a redraw.
+    stdout.resize(10, 3);
+    holding = false;
+    const before = stdout.output.length;
+    held.shift()?.();
+    await instance.waitUntilRenderFlush();
+    expect(stdout.output.slice(before).split('\x1b[1;1H\x1b[J')).toHaveLength(3);
   });
 });

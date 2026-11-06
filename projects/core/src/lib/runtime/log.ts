@@ -88,6 +88,7 @@ export class FrameLog {
     if (!this.onScreen || this.previous === null) return;
     this.pendingErase = eraseFrame(reflowedHeight(this.previous, columns), this.endsOnLastRow);
     this.onScreen = false;
+    this.endsOnLastRow = false;
   }
 
   /** Whether `next` is the frame that `clear` took away, which an unmount must not bring back. */
@@ -108,6 +109,7 @@ export class FrameLog {
     const erase = this.pendingErase || eraseFrame(this.height, this.endsOnLastRow);
     this.pendingErase = '';
     this.onScreen = false;
+    this.endsOnLastRow = false;
     return erase;
   }
 

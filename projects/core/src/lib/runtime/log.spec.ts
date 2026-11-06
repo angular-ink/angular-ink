@@ -260,6 +260,26 @@ describe('FrameLog with a frame as tall as the screen', () => {
     expect(log.frame(frame)).toBe('');
   });
 
+  it('forgets where the cursor rested once the frame is erased', async () => {
+    const log = newLog(3);
+    const screen = openScreen(10, 5);
+    await screen.write(log.frame(grid(10, 'a', 'b', 'c')));
+    await screen.write(log.clear());
+    await screen.write(log.frame(grid(10)));
+    await screen.write(log.frame(grid(10, 'x')));
+    expect(screen.viewport()).toEqual(['x']);
+  });
+
+  it('forgets it after a resize that erases the frame too', async () => {
+    const log = newLog(3);
+    const screen = openScreen(10, 5);
+    await screen.write(log.frame(grid(10, 'a', 'b', 'c')));
+    log.invalidate(10);
+    await screen.write(log.frame(grid(10)));
+    await screen.write(log.frame(grid(10, 'x')));
+    expect(screen.viewport()).toEqual(['x']);
+  });
+
   it('draws it again as the last frame, and not otherwise', () => {
     const log = newLog(3);
     const frame = grid(10, 'a', 'b', 'c');
