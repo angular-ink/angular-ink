@@ -17,7 +17,8 @@ Tests are written first and must fail without the change they cover (see `AGENTS
 | End to end  | The built CLI in a pseudo-terminal, compared with expected screens              | `scripts/e2e.mjs`                          | `e2e/`                 |
 | Parity      | The same app on Ink and on angular-ink gives the same frames                    | `parity/run.mjs`                           | `parity/`              |
 
-The parity level arrives with the task that builds it.
+`./scripts/dev node parity/run.mjs` exits 1 on a difference that `parity/README.md` does not list,
+and writes the count to [`parity.md`](parity.md).
 
 ### Test isolation
 
@@ -61,6 +62,29 @@ and go through:
 The spec checks that `xterm`, `kitty` and `tmux` have every key. Add a terminal to that list once
 its files are in.
 
+### Terminals checked
+
+The tests run on `@xterm/headless`, which is not any terminal a user has. This table is filled in by
+hand by the maintainer, in each of GNOME Terminal, kitty, Alacritty, WezTerm, tmux and the VS Code
+terminal. Any row marks what was seen there, and no row means not checked yet.
+
+From the repository, in that terminal, with Node from nvm as these need the terminal itself:
+
+```sh
+node parity/width-probe.mjs        # a line per case; any DIFFERS is a note in parity/README.md
+
+./scripts/dev npm run build:core && ./scripts/dev npm run build:cli
+./scripts/dev node dist/cli/cli.js build projects/demo/src/status.ts --tsconfig projects/demo/tsconfig.json --out out-tsc/status.mjs
+./scripts/dev node dist/cli/cli.js build projects/demo/src/deploy.ts --tsconfig projects/demo/tsconfig.json --out out-tsc/deploy.mjs
+node out-tsc/status.mjs            # resize the window both ways, then q
+node out-tsc/deploy.mjs            # arrows and Enter
+```
+
+Look for flicker, and for misaligned borders or columns.
+
+| Terminal | Version | Width probe | `status` | `deploy` | Date | Notes |
+| -------- | ------- | ----------- | -------- | -------- | ---- | ----- |
+
 ## Formatting and lint
 
 ### Prettier 3
@@ -74,7 +98,7 @@ its files are in.
 | -------------------------- | ----------------------------------------------------------------------------------------- |
 | `typescript-eslint`        | `strictTypeChecked` and `stylisticTypeChecked`                                            |
 | `angular-eslint`           | `tsRecommended` and `templateRecommended`, selector prefix `ink`                          |
-| `no-restricted-imports`    | the libraries do not import `@angular/common`                                             |
+| `no-restricted-imports`    | the libraries do not import `@angular/common`; only `parity/` imports `ink` or `react`    |
 | `no-restricted-syntax`     | private `ɵ` Angular imports only in `platform/angular-private.ts`                         |
 | `regexp`                   | `recommended`, and `no-super-linear-backtracking` as an error (ReDoS)                     |
 | `eslint-config-prettier`   | last, so formatting never fights lint                                                     |

@@ -34,6 +34,7 @@ export default defineConfig({
       'projects/cli/src/**/*.spec.ts',
       'projects/demo/src/**/*.spec.ts',
       'scripts/*.spec.mjs',
+      'parity/*.spec.mjs',
     ],
     coverage: {
       provider: 'v8',

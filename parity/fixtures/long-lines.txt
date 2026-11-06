@@ -1,0 +1,9 @@
+first line
+second line, which is short
+	third line, with a tab at its start
+fourth line, long enough that it has to wrap on a terminal of eighty columns, at the very least once, and it goes on
+fifth line, the origin, long enough that it has to wrap on a terminal of eighty columns, at the very least once
+sixth line
+seventh line
+eighth line
+ninth line

@@ -7,6 +7,12 @@ import tseslint from 'typescript-eslint';
 
 const lib = 'projects/core/src/lib';
 
+// Ink and React are for comparing with, in parity/, and must reach nothing that ships.
+const noInk = {
+  group: ['ink', 'ink/*', 'react', 'react/*'],
+  message: 'Ink and React are used only by the parity tests in parity/.',
+};
+
 export default tseslint.config(
   {
     ignores: [
@@ -74,6 +80,21 @@ export default tseslint.config(
     },
   },
   {
+    // The parity apps are user code too, one equivalent of each app written for Ink.
+    files: ['parity/ng-apps/**/*.ts'],
+    rules: {
+      '@angular-eslint/component-selector': [
+        'error',
+        { type: 'element', prefix: 'parity', style: 'kebab-case' },
+      ],
+    },
+  },
+  {
+    files: ['**/*.ts', '**/*.mjs', '**/*.js'],
+    ignores: ['parity/**'],
+    rules: { 'no-restricted-imports': ['error', { patterns: [noInk] }] },
+  },
+  {
     // @angular/common is not a peer dependency: the published libraries must not import it.
     files: ['projects/core/src/**/*.ts', 'projects/testing/src/**/*.ts'],
     ignores: ['**/*.spec.ts'],
@@ -86,6 +107,7 @@ export default tseslint.config(
               group: ['@angular/common', '@angular/common/*'],
               message: 'The libraries peer on @angular/core only.',
             },
+            noInk,
           ],
         },
       ],

@@ -101,6 +101,8 @@ export function openScreen({ file, args = [], columns = COLUMNS, rows = ROWS, en
   };
 
   return {
+    /** The headless terminal, for what the helpers here do not show. Gone after `stop`. */
+    terminal,
     /** The visible rows, without trailing blanks. */
     screen,
     /** Everything the terminal holds, scrollback included. */
