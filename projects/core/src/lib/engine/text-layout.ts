@@ -31,7 +31,7 @@ function squashChildren(node: InkNode, style: CellStyle): string {
 
 function squashElement(node: InkNode, style: CellStyle): string {
   // ink-newline has no child text node; its owner knows the line breaks it stands for.
-  const owned = (node.owner as { text?: unknown } | null)?.text;
+  const owned = node.tag === 'ink-newline' ? (node.owner as { text?: unknown } | null)?.text : null;
   if (typeof owned === 'function') return String(owned.call(node.owner));
   return squashChildren(node, node.tag === 'ink-text' ? styleOf(node, style) : style);
 }
@@ -61,6 +61,17 @@ function styledRuns(text: string, style: CellStyle): string {
   return out;
 }
 
+/** Index just past the SGR sequence that starts at `start`, or -1 when none does. */
+function sgrEndAt(text: string, start: number): number {
+  if (text[start + 1] !== '[') return -1;
+  for (let j = start + 2; j < text.length; j++) {
+    const code = text.charCodeAt(j);
+    if (code === 0x6d) return j + 1;
+    if (code !== 0x3b && (code < 0x30 || code > 0x39)) return -1;
+  }
+  return -1;
+}
+
 /** Tabs go to the next multiple of 8 columns. SGR takes no columns. */
 function expandTabs(text: string): string {
   if (!text.includes('\t')) return text;
@@ -69,10 +80,10 @@ function expandTabs(text: string): string {
   let i = 0;
   while (i < text.length) {
     const ch = text[i] ?? '';
-    if (ch === '\x1b') {
-      const end = text.indexOf('m', i);
-      out += text.slice(i, end + 1);
-      i = end + 1;
+    const sgrEnd = ch === '\x1b' ? sgrEndAt(text, i) : -1;
+    if (sgrEnd !== -1) {
+      out += text.slice(i, sgrEnd);
+      i = sgrEnd;
     } else if (ch === '\t') {
       const fill = TAB_STOP - (column % TAB_STOP);
       out += ' '.repeat(fill);

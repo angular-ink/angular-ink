@@ -109,6 +109,12 @@ describe('squashText', () => {
     expect(squashText(textElement({}, literal('\tc')), PLAIN_STYLE)).toBe('        c');
   });
 
+  it('ignores a text method on an owner that is not ink-newline', () => {
+    const other = createNode('element', 'ink-other');
+    other.owner = Object.assign({ inkProps: () => ({}) }, { text: () => 'LEAK' });
+    expect(squashText(textElement({}, literal('a'), other), PLAIN_STYLE)).toBe('a');
+  });
+
   it('drops the carriage return of CRLF', () => {
     expect(squashText(textElement({}, literal('a\r\nb')), PLAIN_STYLE)).toBe('a\nb');
   });
@@ -171,6 +177,11 @@ describe('layoutLines', () => {
 
   it('expands tabs and drops carriage returns', () => {
     expect(layoutLines('a\tb\r\nc', 20, 'wrap')).toEqual(['a       b', 'c']);
+  });
+
+  it('does not hang on an unfinished or non-SGR escape next to a tab', () => {
+    expect(layoutLines('\t\x1b[', 20, 'wrap')).toEqual(['        \x1b[']);
+    expect(layoutLines('a\t\x1bb m', 20, 'wrap')).toEqual(['a       \x1bb m']);
   });
 
   it('gives one empty line for empty text', () => {
@@ -240,5 +251,36 @@ describe('wrap cache', () => {
     layoutLines(huge, 80, 'hard');
     layoutLines(huge, 80, 'hard');
     expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  describe('eviction', () => {
+    // Each entry weighs about twice its text (key plus result), so three of these pass 2^20.
+    const big = (char: string): string => char.repeat(200_000);
+    const wide = 1_000_000;
+
+    it('drops the least recently used entry once the total passes the cap', () => {
+      const spy = vi.mocked(wrapAnsi);
+      spy.mockClear();
+      layoutLines(big('a'), wide, 'wrap');
+      layoutLines(big('b'), wide, 'wrap');
+      layoutLines(big('c'), wide, 'wrap');
+      expect(spy).toHaveBeenCalledTimes(3);
+      layoutLines(big('a'), wide, 'wrap');
+      expect(spy).toHaveBeenCalledTimes(4);
+    });
+
+    it('refreshes recency on a hit', () => {
+      const spy = vi.mocked(wrapAnsi);
+      spy.mockClear();
+      layoutLines(big('d'), wide, 'wrap');
+      layoutLines(big('e'), wide, 'wrap');
+      layoutLines(big('d'), wide, 'wrap');
+      layoutLines(big('f'), wide, 'wrap');
+      expect(spy).toHaveBeenCalledTimes(3);
+      layoutLines(big('d'), wide, 'wrap');
+      expect(spy).toHaveBeenCalledTimes(3);
+      layoutLines(big('e'), wide, 'wrap');
+      expect(spy).toHaveBeenCalledTimes(4);
+    });
   });
 });
