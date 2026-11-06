@@ -116,7 +116,9 @@ describe('squashText', () => {
 
 describe('layoutLines', () => {
   it('wraps at word boundaries', () => {
-    expect(layoutLines('hello world', 5, 'wrap')).toEqual(['hello', 'world']);
+    // Ink 8.0.0 wraps with trim: false, so the space that fits nowhere stays on a row of its own.
+    expect(layoutLines('hello world', 5, 'wrap')).toEqual(['hello', ' ', 'world']);
+    expect(layoutLines('hello big world', 9, 'wrap')).toEqual(['hello big', ' world']);
   });
 
   it('breaks a word longer than the line when wrapping', () => {
@@ -177,7 +179,7 @@ describe('layoutLines', () => {
 
   it('wraps text with SGR without counting the codes as columns', () => {
     const lines = layoutLines('\x1b[31mhello world\x1b[39m', 5, 'wrap');
-    expect(lines).toHaveLength(2);
+    expect(lines).toHaveLength(3);
   });
 });
 
@@ -193,7 +195,7 @@ describe('measureText', () => {
   });
 
   it('gives the wrapped height', () => {
-    expect(measureText('hello world', 'wrap', 5)).toEqual({ width: 5, height: 2 });
+    expect(measureText('hello world', 'wrap', 5)).toEqual({ width: 5, height: 3 });
   });
 
   it('counts each line of a multiline text', () => {

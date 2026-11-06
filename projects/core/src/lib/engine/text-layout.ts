@@ -143,7 +143,7 @@ function applyWrap(text: string, width: number, wrap: TextWrap): string {
     return splitStyledLines(text)
       .map((line) =>
         wrap === 'wrap'
-          ? wrapAnsi(line, width, { hard: true })
+          ? wrapAnsi(line, width, { hard: true, trim: false })
           : wrapAnsi(line, width, { hard: true, wordWrap: false, trim: false }),
       )
       .join('\n');
