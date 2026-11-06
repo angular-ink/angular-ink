@@ -178,6 +178,22 @@ describe('writeFrame when a row gets shorter', () => {
     expect(visible(screen)).toEqual(['ab', 'c']);
   });
 
+  it('also erases blanks written earlier, left of the cells that changed', async () => {
+    const screen = openScreen(10, 5);
+    const long = gridOf(['abcdef'], 10);
+    const gap = gridOf(['ab  ef'], 10);
+    const short = gridOf(['ab'], 10);
+    await screen.write(frame(null, long));
+    await screen.write(frame(long, gap));
+    const bytes = frame(gap, short);
+    expect(bytes).toContain(`\x1b[3G${ERASE_LINE_END}`);
+    await screen.write(bytes);
+    expect(visible(screen)).toEqual(['ab']);
+    // Nothing is left to reflow: the row stays one row, so the rest position is the next one.
+    screen.resize(2, 5);
+    expect(screen.cursor().y).toBe(1);
+  });
+
   it('draws the cells before the blanks in the same run', async () => {
     const screen = openScreen(10, 5);
     const long = gridOf(['abcdefgh'], 10);

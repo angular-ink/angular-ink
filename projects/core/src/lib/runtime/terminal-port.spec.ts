@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -56,6 +57,23 @@ describe('createStreamPort', () => {
     );
     expect([zero.columns, zero.rows]).toEqual([80, 24]);
     zero.dispose();
+  });
+
+  it('treats a stream with no writable property as open', async () => {
+    const written: string[] = [];
+    const stream = Object.assign(new EventEmitter(), {
+      write(chunk: string, done: () => void) {
+        written.push(chunk);
+        done();
+        return true;
+      },
+    }) as unknown as NodeJS.WritableStream;
+    const onClosed = vi.fn();
+    const port = createStreamPort(stream, onClosed);
+    await port.write('x');
+    expect(written).toEqual(['x']);
+    expect(onClosed).not.toHaveBeenCalled();
+    port.dispose();
   });
 
   it('calls resize listeners until they are removed', () => {

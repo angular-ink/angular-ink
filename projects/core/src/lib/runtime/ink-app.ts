@@ -250,7 +250,7 @@ export class InkApp implements InkRuntime {
     do {
       this.scheduler.flush();
       await this.lastWrite;
-    } while (this.scheduler.pending);
+    } while (this.scheduler.pending || this.writing || this.frameWaitsForWrite);
   }
 
   clear(): void {
@@ -428,10 +428,11 @@ export class InkApp implements InkRuntime {
   }
 
   // The first frame must start at column 0, and only the terminal knows where the cursor is. From
-  // column 0 these blanks stay on the line. From any other column they wrap to a new line, which
-  // keeps the partial line. The erase then takes them back, as a reflow would count them.
+  // column 0 a full row of blanks ends waiting to wrap, on the same line. From any other column it
+  // wraps to a new line, which keeps the partial line. The erase then takes the blanks back, as a
+  // reflow would count them.
   private freshLine(): string {
-    return `${' '.repeat(this.port.columns - 1)}\r${ERASE_LINE_END}`;
+    return `${' '.repeat(this.port.columns)}\r${ERASE_LINE_END}`;
   }
 }
 

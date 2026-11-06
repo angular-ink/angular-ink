@@ -4,7 +4,9 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { loadYoga, type Yoga } from 'yoga-layout/load';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { gridToString } from '../engine/grid';
+import type { CellStyle } from '../engine/ansi';
+import { parseColor } from '../engine/color';
+import { gridToString, type CellGrid } from '../engine/grid';
 import { describeError, paintErrorOverview, parseStackLine } from './error-overview';
 
 let yoga: Yoga;
@@ -98,8 +100,12 @@ describe('describeError', () => {
 
   it('lists the stack, with parsed frames tidied and the others left as they are', () => {
     const error = new Error('boom');
-    error.stack = `Error: boom\n    at run (${dir}/app.js:1:2)\n    at native`;
-    expect(describeError(error, dir).stack).toEqual(['run (app.js:1:2)', '    at native']);
+    error.stack = `Error: boom\n    at run (${dir}/app.js:1:2)\n    at ${dir}/app.js:3:4\n    at native`;
+    expect(describeError(error, dir).stack).toEqual([
+      { name: 'run', place: '(app.js:1:2)' },
+      { name: '', place: '(app.js:3:4)' },
+      { name: '    at native', place: null },
+    ]);
   });
 
   it('skips every line of a message with many', () => {
@@ -129,6 +135,47 @@ describe('paintErrorOverview', () => {
     expect(text).toContain(`${sourcePath}:5:2`);
     expect(text).toContain('5:   five()');
     expect(text).toContain(`- run (${sourcePath}:5:2)`);
+  });
+
+  describe('stack rows, as Ink 8.0.0 draws them', () => {
+    const stackError = (): Error => {
+      const error = new Error('boom');
+      error.stack = 'Error: boom\n    at run (/a/b.js:1:2)\n    at /a/c.js:3:4\n    at native';
+      return error;
+    };
+
+    /** The style of the first cell of `text` on the row that holds it. */
+    function styleAt(grid: CellGrid, text: string): CellStyle {
+      const rows = gridToString(grid, { ansi: false }).split('\n');
+      const y = rows.findIndex((row) => row.includes(text));
+      const x = rows[y]?.indexOf(text) ?? -1;
+      const style = grid.styles[y * grid.columns + x];
+      if (style === undefined) throw new Error(`no cell for ${text}`);
+      return style;
+    }
+
+    it('have two spaces after the dash of an anonymous frame', () => {
+      const text = gridToString(paintErrorOverview(stackError(), 80, yoga), { ansi: false });
+      expect(text).toContain('- run (/a/b.js:1:2)');
+      expect(text).toContain('-  (/a/c.js:3:4)');
+      expect(text).toContain('-     at native');
+    });
+
+    it('draw the dash dim, the name dim and bold, and the place dim and gray', () => {
+      const grid = paintErrorOverview(stackError(), 80, yoga);
+      expect(styleAt(grid, '- run')).toMatchObject({ dim: true, bold: false, fg: null });
+      expect(styleAt(grid, 'run (')).toMatchObject({ dim: true, bold: true, fg: null });
+      expect(styleAt(grid, '(/a/b.js')).toMatchObject({
+        dim: true,
+        bold: false,
+        fg: parseColor('gray'),
+      });
+    });
+
+    it('draw an unparsed line dim and bold', () => {
+      const grid = paintErrorOverview(stackError(), 80, yoga);
+      expect(styleAt(grid, 'at native')).toMatchObject({ dim: true, bold: true });
+    });
   });
 
   it('paints the label white on red, as Ink does', () => {

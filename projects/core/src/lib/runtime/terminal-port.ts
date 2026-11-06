@@ -20,7 +20,8 @@ export interface StreamPort extends TerminalPort {
   dispose(): void;
 }
 
-interface OutputStream extends NodeJS.WritableStream {
+interface OutputStream extends Omit<NodeJS.WritableStream, 'writable'> {
+  readonly writable?: boolean;
   readonly columns?: number;
   readonly rows?: number;
   readonly isTTY?: boolean;
@@ -120,7 +121,9 @@ class StreamAdapter implements StreamPort {
 
   private isClosed(): boolean {
     const { destroyed, writableEnded, writable } = this.stream;
-    if (!this.closed && (destroyed === true || writableEnded === true || !writable)) this.close();
+    if (!this.closed && (destroyed === true || writableEnded === true || writable === false)) {
+      this.close();
+    }
     return this.closed;
   }
 

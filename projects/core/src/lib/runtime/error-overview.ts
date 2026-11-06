@@ -22,13 +22,20 @@ export interface ExcerptLine {
   readonly isOrigin: boolean;
 }
 
+export interface StackEntry {
+  /** The function of a parsed frame, or the whole line of one that could not be parsed. */
+  readonly name: string;
+  /** `(file:line:column)`, for a parsed frame. */
+  readonly place: string | null;
+}
+
 export interface ErrorView {
   readonly message: string;
   /** `file:line:column` of the top of the stack. */
   readonly origin: string | null;
   readonly excerpt: readonly ExcerptLine[] | null;
   readonly gutterWidth: number;
-  readonly stack: readonly string[];
+  readonly stack: readonly StackEntry[];
 }
 
 const EXCERPT_AROUND = 3;
@@ -118,11 +125,10 @@ function safeFilePath(url: string): string | null {
   }
 }
 
-function stackEntry(line: string, cwd: string): string {
+function stackEntry(line: string, cwd: string): StackEntry {
   const frame = parseStackLine(line);
-  if (frame === null) return line;
-  const place = `(${displayPath(frame.file, cwd)}:${locationOf(frame)})`;
-  return frame.fn === '' ? place : `${frame.fn} ${place}`;
+  if (frame === null) return { name: line, place: null };
+  return { name: frame.fn, place: `(${displayPath(frame.file, cwd)}:${locationOf(frame)})` };
 }
 
 @Component({
@@ -164,7 +170,11 @@ function stackEntry(line: string, cwd: string): string {
         <ink-box [marginTop]="1" flexDirection="column">
           @for (entry of view().stack; track $index) {
             <ink-box>
-              <ink-text dimColor>{{ '- ' + entry }}</ink-text>
+              <ink-text dimColor>{{ '- ' }}</ink-text>
+              <ink-text dimColor bold>{{ entry.name }}</ink-text>
+              @if (entry.place; as place) {
+                <ink-text dimColor color="gray">{{ ' ' + place }}</ink-text>
+              }
             </ink-box>
           }
         </ink-box>

@@ -26,7 +26,7 @@ export interface RenderOptions {
 }
 
 export interface Instance {
-  /** Changes the inputs of the root component. */
+  /** Sets the given inputs of the root component. Inputs left out keep their values. */
   rerender(inputs: Record<string, unknown>): void;
   unmount(): void;
   /** Resolves with the value of `exit(value)`, and rejects with an error the app ended on. */

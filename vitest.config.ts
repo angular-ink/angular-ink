@@ -21,6 +21,7 @@ export default defineConfig({
     // Spies and stubbed globals never outlive the test that made them.
     restoreMocks: true,
     unstubGlobals: true,
+    unstubEnvs: true,
     include: [
       'projects/core/src/**/*.spec.ts',
       'projects/testing/src/**/*.spec.ts',

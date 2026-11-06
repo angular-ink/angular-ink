@@ -117,6 +117,42 @@ describe('FrameLog', () => {
     expect(screen.viewport()).toEqual(['kept', 'new']);
   });
 
+  it('counts the early wrap of a wide character that does not fit', async () => {
+    const log = newLog();
+    const screen = openScreen(10, 12);
+    await screen.write('kept\r\n');
+    await screen.write(log.frame(grid(10, '世界世界世')));
+    screen.terminal.resize(3, 12);
+    log.invalidate(3);
+    await screen.write(log.frame(grid(3, 'new')));
+    expect(screen.viewport()).toEqual(['kep', 't', 'new']);
+  });
+
+  it('leaves the redraw to the next frame when text arrives with a reflow erase pending', async () => {
+    const log = newLog();
+    const screen = openScreen(20, 12);
+    await screen.write('kept\r\n');
+    await screen.write(log.frame(grid(20, 'aaaaaaaaaaaaaaaaaaaa')));
+    screen.terminal.resize(10, 12);
+    log.invalidate(10);
+    const before = log.beginText();
+    const after = log.endText();
+    expect(after).toBe('');
+    await screen.write(`${before}text\r\n${after}`);
+    expect(screen.viewport()).toEqual(['kept', 'text']);
+    expect(log.height).toBe(0);
+    await screen.write(log.frame(grid(10, 'new')));
+    expect(screen.viewport()).toEqual(['kept', 'text', 'new']);
+  });
+
+  it('closes the synchronized update it opened when it skips the redraw', () => {
+    const log = newLog(24, true);
+    log.frame(grid(20, 'abc'));
+    log.invalidate(10);
+    expect(log.beginText().startsWith('\x1b[?2026h')).toBe(true);
+    expect(log.endText()).toBe('\x1b[?2026l');
+  });
+
   it('a resize with nothing on screen erases nothing', () => {
     const log = newLog();
     log.invalidate(10);

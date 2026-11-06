@@ -195,6 +195,13 @@ describe('renderInk', () => {
       expect(stdout.viewport()).toEqual(['$ prompt', 'hello world']);
     });
 
+    it('keeps a partial line of one character', async () => {
+      const stdout = new FakeTerminal();
+      await stdout.shell('$');
+      await render(Hello, { stdout });
+      expect(stdout.viewport()).toEqual(['$', 'hello world']);
+    });
+
     it('adds no blank line when the cursor is already on a fresh line', async () => {
       const stdout = new FakeTerminal();
       await stdout.shell('$ prompt\r\n');
@@ -635,6 +642,30 @@ describe('renderInk', () => {
       });
       await new Promise((resolve) => setImmediate(resolve));
       await new Promise((resolve) => setImmediate(resolve));
+      expect(held).toHaveLength(1);
+      expect(flushed).toBe(false);
+      held.shift()?.();
+      await flush;
+      expect(flushed).toBe(true);
+    });
+
+    it('waitUntilRenderFlush waits for the frame that was held behind a write', async () => {
+      const held: (() => void)[] = [];
+      const stdout = new FakePipe();
+      stdout._write = (_chunk, _encoding, done) => {
+        held.push(done);
+      };
+      const instance = await start(Tools, { stdout, maxFps: 1000 });
+      Tools.last.label.set('newest');
+      let flushed = false;
+      const flush = instance.waitUntilRenderFlush().then(() => {
+        flushed = true;
+      });
+      // The first frame is still being written, and the throttle interval has passed.
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(held).toHaveLength(1);
+      held.shift()?.();
+      await new Promise((resolve) => setTimeout(resolve, 10));
       expect(held).toHaveLength(1);
       expect(flushed).toBe(false);
       held.shift()?.();

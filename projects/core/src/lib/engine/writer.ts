@@ -78,7 +78,8 @@ function frameBytes(previous: CellGrid | null, next: CellGrid, options: WriteOpt
         pen.moveToColumn(run.x);
         pen.draw(run.cells.slice(0, occupied - run.x), next.columns);
       }
-      pen.moveToColumn(Math.max(occupied, run.x));
+      // From `occupied`, not from the run: blanks an earlier frame wrote may lie before the run.
+      pen.moveToColumn(occupied);
       pen.eraseLineEnd();
     }
   }

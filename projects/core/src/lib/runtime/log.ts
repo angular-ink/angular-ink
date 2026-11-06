@@ -25,6 +25,8 @@ export class FrameLog {
   private onScreen = false;
   /** The erase a resize asked for, sent with the next frame so that the two arrive together. */
   private pendingErase = '';
+  /** Text is erasing a frame for a size it no longer fits, so the next frame draws instead. */
+  private skipRedraw = false;
 
   constructor(private readonly options: FrameLogOptions) {}
 
@@ -45,6 +47,7 @@ export class FrameLog {
 
   /** Bytes that take the frame off the screen, before text from outside goes where it was. */
   beginText(): string {
+    this.skipRedraw = this.pendingErase !== '';
     const erase = this.takeErase();
     return this.previous === null ? erase : this.syncBegin() + erase;
   }
@@ -52,6 +55,10 @@ export class FrameLog {
   /** Bytes that draw the frame again, below the text that `beginText` made room for. */
   endText(): string {
     if (this.previous === null) return '';
+    if (this.skipRedraw) {
+      this.skipRedraw = false;
+      return this.syncEnd();
+    }
     this.onScreen = true;
     // A line feed from the text need not have reset the column, and the frame starts from column 0.
     return `\r${writeFrame(null, this.previous, this.writeOptions(false))}${this.syncEnd()}`;
@@ -107,11 +114,28 @@ export class FrameLog {
 /** The rows `grid` takes after a terminal reflowed it into `columns`. */
 function reflowedHeight(grid: CellGrid, columns: number): number {
   let height = 0;
-  for (let y = 0; y < grid.rows; y++) {
-    // The writer leaves plain blanks at the end of a row out, so the terminal holds none of them.
-    height += Math.max(1, Math.ceil(occupiedColumns(grid, y) / columns));
-  }
+  for (let y = 0; y < grid.rows; y++) height += reflowedRowHeight(grid, y, columns);
   return height;
+}
+
+function reflowedRowHeight(grid: CellGrid, y: number, columns: number): number {
+  const start = y * grid.columns;
+  // The writer leaves plain blanks at the end of a row out, so the terminal holds none of them.
+  const occupied = occupiedColumns(grid, y);
+  let rows = 1;
+  let column = 0;
+  let x = 0;
+  while (x < occupied) {
+    // The second cell of a wide character holds ''. One that does not fit wraps early and whole.
+    const width = grid.chars[start + x + 1] === '' ? 2 : 1;
+    if (column > 0 && column + width > columns) {
+      rows++;
+      column = 0;
+    }
+    column += width;
+    x += width;
+  }
+  return rows;
 }
 
 /** The frame as plain lines with SGR only, for a stream that takes no cursor moves. */
