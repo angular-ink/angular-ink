@@ -249,12 +249,10 @@ describe('createStreamPort', () => {
     });
 
     it('treats a bad descriptor as a closed stream and does not throw', () => {
-      const dir = mkdtempSync(join(tmpdir(), 'ink-port-'));
-      const fd = openSync(join(dir, 'out'), 'w');
-      closeSync(fd);
-      rmSync(dir, { recursive: true });
+      // A descriptor that was closed here can be open again by now, as the process reuses numbers.
+      const neverOpen = 2 ** 31 - 1;
       const onClosed = vi.fn();
-      const port = createStreamPort(Object.assign(new HeldStream(), { fd }), onClosed);
+      const port = createStreamPort(Object.assign(new HeldStream(), { fd: neverOpen }), onClosed);
       expect(() => {
         port.writeNow('x');
       }).not.toThrow();
