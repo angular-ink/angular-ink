@@ -106,12 +106,15 @@ export class FocusManager implements FocusManagerProps, OnDestroy {
   private syncListener(): void {
     const wanted = this.focusables.some(({ isActive }) => isActive);
     if (wanted && this.stopListening === null) {
-      // Without a TTY there is no key to read, and no raw mode to ask for.
-      if (this.runtime?.isRawModeSupported === true) {
-        this.stopListening = this.runtime.listenToKeys((_input, key) => {
-          this.onKey(key);
-        }, null);
-      }
+      // Without a TTY this stays inactive, with the warning of the runtime.
+      this.stopListening =
+        this.runtime?.listenToKeys(
+          (_input, key) => {
+            this.onKey(key);
+          },
+          null,
+          'injectFocus',
+        ) ?? null;
     } else if (!wanted && this.stopListening !== null) {
       this.stopListening();
       this.stopListening = null;

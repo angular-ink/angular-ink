@@ -15,8 +15,11 @@ export abstract class InkRuntime {
   /** True where nothing is live (`renderInkToString`): focus does not track anything there. */
   abstract readonly inert: boolean;
   abstract setRawMode(enabled: boolean): void;
-  /** Returns how to stop. `host` is the node of the component, which orders the handlers. */
-  abstract listenToKeys(handler: KeyHandler, host: object | null): () => void;
+  /**
+   * Returns how to stop. `host` is the node of the component, which orders the handlers. `caller`
+   * is the name an inactive listener warns with, `injectInput` by default.
+   */
+  abstract listenToKeys(handler: KeyHandler, host: object | null, caller?: string): () => void;
   /** Returns how to stop. `host` is the node of the component, which orders the handlers. */
   abstract listenToPaste(handler: PasteHandler, host: object | null): () => void;
 }

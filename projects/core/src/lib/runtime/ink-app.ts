@@ -372,8 +372,8 @@ export class InkApp implements InkRuntime {
     else this.rawMode.release();
   }
 
-  listenToKeys(handler: KeyHandler, host: object | null): () => void {
-    if (!this.canListen('injectInput')) return noop;
+  listenToKeys(handler: KeyHandler, host: object | null, caller = 'injectInput'): () => void {
+    if (!this.canListen(caller)) return noop;
     const stop = this.inputBus.onKey(handler, host);
     this.rawMode.acquire();
     return () => {

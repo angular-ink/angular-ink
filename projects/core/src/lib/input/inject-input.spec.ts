@@ -753,6 +753,42 @@ describe('injectInput', () => {
       expect(test.stderr.writes).toEqual([NOT_A_TTY]);
     });
 
+    it('warns for injectFocus too, once per render', async () => {
+      @Component({
+        selector: 'ink-test-focus-rows',
+        imports: [InkText],
+        template: `<ink-text>x</ink-text>`,
+      })
+      class TwoFocusables {
+        readonly first = injectFocus({ autoFocus: true });
+        readonly second = injectFocus();
+        constructor() {
+          injectInput(() => undefined);
+        }
+      }
+      const test = await renderForTest(TwoFocusables, { isTty: false });
+      expect(test.stderr.writes).toHaveLength(1);
+      expect(test.stderr.writes[0]).toMatch(
+        /^angular-ink: stdin is not a TTY; inject\w+ is inactive\n$/,
+      );
+    });
+
+    it('names injectFocus when it is the only one asking', async () => {
+      @Component({
+        selector: 'ink-test-focus-only',
+        imports: [InkText],
+        template: `<ink-text>x</ink-text>`,
+      })
+      class OneFocusable {
+        readonly focus = injectFocus();
+      }
+      const test = await renderForTest(OneFocusable, { isTty: false });
+      expect(test.stderr.writes).toEqual([
+        'angular-ink: stdin is not a TTY; injectFocus is inactive\n',
+      ]);
+      expect(test.stdin.isRaw).toBe(false);
+    });
+
     it('reports raw mode as unsupported, and setRawMode throws, as in Ink 8.0.0', async () => {
       const test = await renderForTest(StdinProbe, { isTty: false });
       const { terminal } = StdinProbe.last;
