@@ -6,6 +6,9 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tty_flags=()
 [ -t 0 ] && [ -t 1 ] && tty_flags=(-t)
+# By name and only when set: is-in-ci reads a CI that is set at all as CI, even an empty one.
+ci_flags=()
+[ -n "${CI+set}" ] && ci_flags=(-e CI)
 user_flags=(-u 1000:1000)
 command=("$@")
 if [ -n "${NGINK_APT:-}" ]; then
@@ -14,9 +17,9 @@ if [ -n "${NGINK_APT:-}" ]; then
   command=(sh -c 'apt-get -qq update >/dev/null && apt-get -qq install -y --no-install-recommends $NGINK_APT >/dev/null && exec setpriv --reuid=1000 --regid=1000 --clear-groups "$@"' sh "$@")
 fi
 # Named per process, so a stuck container can be found and stopped without touching others.
-exec docker run --rm -i --name "ngink-dev-$$" "${tty_flags[@]}" \
+exec docker run --rm -i --name "ngink-dev-$$" "${tty_flags[@]}" "${ci_flags[@]}" \
   "${user_flags[@]}" -m 6g --memory-swap 6g \
-  -e HOME=/tmp -e NPM_CONFIG_UPDATE_NOTIFIER=false -e CI="${CI:-}" \
+  -e HOME=/tmp -e NPM_CONFIG_UPDATE_NOTIFIER=false \
   ${NGINK_PUBLISH:+-p "$NGINK_PUBLISH"} \
   -v "$root":/w -w /w \
   "${NGINK_IMAGE:-node:24-bookworm-slim}" "${command[@]}"
