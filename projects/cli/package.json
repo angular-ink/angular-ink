@@ -1,0 +1,47 @@
+{
+  "name": "angular-ink",
+  "version": "0.0.0",
+  "description": "Builds an angular-ink terminal app into one executable file, ahead of time",
+  "keywords": [
+    "angular",
+    "terminal",
+    "cli",
+    "tui",
+    "ink",
+    "esbuild",
+    "aot"
+  ],
+  "author": "Gabriel Silva (https://github.com/GabeSilvaDev)",
+  "homepage": "https://github.com/angular-ink/angular-ink",
+  "bugs": {
+    "url": "https://github.com/angular-ink/angular-ink/issues"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/angular-ink/angular-ink.git",
+    "directory": "projects/cli"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "angular-ink": "./cli.js"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./build.d.ts",
+      "default": "./build.js"
+    }
+  },
+  "peerDependencies": {
+    "@angular/compiler-cli": "^22",
+    "typescript": "~6.0"
+  },
+  "dependencies": {
+    "@babel/core": "^8.0.0",
+    "esbuild": "^0.28.2"
+  }
+}

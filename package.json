@@ -7,10 +7,11 @@
     "ng": "ng",
     "build:core": "ng build core",
     "build:testing": "ng build testing",
+    "build:cli": "tsc -p projects/cli/tsconfig.json && cp projects/cli/package.json projects/cli/README.md projects/cli/LICENSE dist/cli/",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
-    "typecheck": "tsc -p projects/core/tsconfig.lib.json --noEmit && tsc -p projects/core/tsconfig.spec.json --noEmit && tsc -p projects/testing/tsconfig.lib.json --noEmit && tsc -p projects/testing/tsconfig.spec.json --noEmit",
+    "typecheck": "tsc -p projects/core/tsconfig.lib.json --noEmit && tsc -p projects/core/tsconfig.spec.json --noEmit && tsc -p projects/testing/tsconfig.lib.json --noEmit && tsc -p projects/testing/tsconfig.spec.json --noEmit && tsc -p projects/cli/tsconfig.json --noEmit && tsc -p projects/cli/tsconfig.spec.json --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "prepare": "husky || true"
@@ -51,7 +52,8 @@
   },
   "workspaces": [
     "projects/core",
-    "projects/testing"
+    "projects/testing",
+    "projects/cli"
   ],
   "lint-staged": {
     "*.{ts,mjs,js}": [

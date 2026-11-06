@@ -40,6 +40,7 @@ All toolchains run in Docker. Nothing is installed on the host except nvm.
 ./scripts/dev npm test -- <pattern>    # one area, e.g. smoke
 ./scripts/dev npm run build:core       # ng-packagr build of @angular-ink/core into dist/core
 ./scripts/dev npm run build:testing    # the same for @angular-ink/testing
+./scripts/dev npm run build:cli        # tsc of the angular-ink command into dist/cli
 ./scripts/dev npm run typecheck
 ./scripts/dev npm run lint
 ```

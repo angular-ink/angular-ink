@@ -31,11 +31,16 @@ export default defineConfig({
     include: [
       'projects/core/src/**/*.spec.ts',
       'projects/testing/src/**/*.spec.ts',
-      'scripts/**/*.spec.mjs',
+      'projects/cli/src/**/*.spec.ts',
+      'scripts/*.spec.mjs',
     ],
     coverage: {
       provider: 'v8',
-      include: ['projects/core/src/lib/**/*.ts', 'projects/testing/src/**/*.ts'],
+      include: [
+        'projects/core/src/lib/**/*.ts',
+        'projects/testing/src/**/*.ts',
+        'projects/cli/src/**/*.ts',
+      ],
       exclude: ['**/*.spec.ts', '**/*.d.ts'],
       reporter: ['text-summary', 'lcov'],
       // Per-folder gates from docs/ENGINEERING.md.
