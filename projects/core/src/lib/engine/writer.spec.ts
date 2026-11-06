@@ -155,6 +155,89 @@ describe('writeFrame', () => {
   });
 });
 
+describe('writeFrame when a row gets shorter', () => {
+  const ERASE_LINE_END = '\x1b[K';
+  const visible = (screen: Screen): string[] => {
+    const rows = screen.viewport();
+    while (rows.at(-1) === '') rows.pop();
+    return rows;
+  };
+
+  it('erases the end of the row and writes no blanks, which a terminal would keep', async () => {
+    const screen = openScreen(10, 5);
+    const long = gridOf(['abcdefgh'], 10);
+    const short = gridOf(['abc'], 10);
+    await screen.write(frame(null, long));
+    const bytes = frame(long, short);
+    expect(bytes).toContain(ERASE_LINE_END);
+    expect(bytes).not.toMatch(/ {2}/);
+    await screen.write(bytes);
+    expect(visible(screen)).toEqual(['abc']);
+    // Only cells with content reflow: at 2 columns this row takes 2 rows, not 4.
+    screen.resize(2, 5);
+    expect(visible(screen)).toEqual(['ab', 'c']);
+  });
+
+  it('draws the cells before the blanks in the same run', async () => {
+    const screen = openScreen(10, 5);
+    const long = gridOf(['abcdefgh'], 10);
+    const short = gridOf(['abX'], 10);
+    await screen.write(frame(null, long));
+    await screen.write(frame(long, short));
+    expect(visible(screen)).toEqual(['abX']);
+  });
+
+  it('empties a whole row', async () => {
+    const screen = openScreen(10, 5);
+    const long = gridOf(['abc', 'def'], 10);
+    const short = gridOf(['', 'def'], 10);
+    await screen.write(frame(null, long));
+    await screen.write(frame(long, short));
+    expect(visible(screen)).toEqual(['', 'def']);
+    expect(screen.cursor()).toEqual({ x: 0, y: 2 });
+  });
+
+  it('keeps blanks in the middle of a row', async () => {
+    const screen = openScreen(10, 5);
+    const long = gridOf(['abcdef'], 10);
+    const gap = gridOf(['ab  ef'], 10);
+    await screen.write(frame(null, long));
+    const bytes = frame(long, gap);
+    expect(bytes).not.toContain(ERASE_LINE_END);
+    await screen.write(bytes);
+    expect(visible(screen)).toEqual(['ab  ef']);
+  });
+
+  it('does not erase with an open background', async () => {
+    const screen = openScreen(10, 5);
+    const long = gridOf(['abcdef'], 10);
+    const short = gridOf(['ab'], 10, RED);
+    await screen.write(frame(null, long));
+    const bytes = frame(long, short);
+    expect(bytes.indexOf('\x1b[0m')).toBeLessThan(bytes.indexOf(ERASE_LINE_END));
+    await screen.write(bytes);
+    expect(visible(screen)).toEqual(['ab']);
+  });
+
+  it('keeps a styled blank, which shows', () => {
+    const background = internStyle({ ...PLAIN_STYLE, bg: namedColor(41) });
+    const long = gridOf(['abc'], 10);
+    const styled = gridOf(['   '], 10, background);
+    expect(frame(long, styled)).not.toContain(ERASE_LINE_END);
+  });
+
+  it('keeps cells to the right that did not change', async () => {
+    const screen = openScreen(10, 5);
+    const before = gridOf(['abc   xyz'], 10);
+    const after = gridOf(['a     xyz'], 10);
+    await screen.write(frame(null, before));
+    const bytes = frame(before, after);
+    expect(bytes).not.toContain(ERASE_LINE_END);
+    await screen.write(bytes);
+    expect(visible(screen)).toEqual(['a     xyz']);
+  });
+});
+
 describe('writeFrame when the frame does not fit the screen', () => {
   const rows = 5;
   const history = Array.from({ length: 7 }, (_, index) => `h${String(index + 1)}`);

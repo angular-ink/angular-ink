@@ -1,4 +1,4 @@
-import { openSgr, type CellStyle } from './ansi';
+import { openSgr, PLAIN_STYLE, type CellStyle } from './ansi';
 import { downgrade, type ColorLevel } from './color-level';
 import { diffGrids } from './diff';
 import type { CellGrid } from './grid';
@@ -6,9 +6,10 @@ import type { CellGrid } from './grid';
 const CSI = '\x1b[';
 const RESET = `${CSI}0m`;
 const ERASE_DOWN = `${CSI}J`;
+const ERASE_LINE_END = `${CSI}K`;
 const HOME = `${CSI}1;1H`;
-const SYNC_BEGIN = `${CSI}?2026h`;
-const SYNC_END = `${CSI}?2026l`;
+export const SYNC_BEGIN = `${CSI}?2026h`;
+export const SYNC_END = `${CSI}?2026l`;
 
 export interface WriteOptions {
   /** Height of the screen. A frame this tall or taller cannot be moved over with relative moves. */
@@ -65,8 +66,21 @@ function frameBytes(previous: CellGrid | null, next: CellGrid, options: WriteOpt
 
   for (const run of runs) {
     pen.moveToRow(run.y);
-    pen.moveToColumn(run.x);
-    pen.draw(run.cells, next.columns);
+    const end = run.x + run.cells.length;
+    const occupied = occupiedColumns(next, run.y);
+    if (end <= occupied) {
+      pen.moveToColumn(run.x);
+      pen.draw(run.cells, next.columns);
+    } else {
+      // A blank that is written stays in the terminal's line, which would then reflow longer than
+      // it looks, past where a resize erases it. An erase leaves nothing there.
+      if (occupied > run.x) {
+        pen.moveToColumn(run.x);
+        pen.draw(run.cells.slice(0, occupied - run.x), next.columns);
+      }
+      pen.moveToColumn(Math.max(occupied, run.x));
+      pen.eraseLineEnd();
+    }
   }
   pen.moveToRow(next.rows);
   // The reset comes first: an erase paints with the open background.
@@ -74,6 +88,15 @@ function frameBytes(previous: CellGrid | null, next: CellGrid, options: WriteOpt
   if (eraseTail) pen.out += `\r${ERASE_DOWN}`;
   else if (pen.column !== 0) pen.out += '\r';
   return pen.out;
+}
+
+/** How many columns of row `y` hold something other than a plain blank, counting from the left. */
+export function occupiedColumns(grid: CellGrid, y: number): number {
+  const row = y * grid.columns;
+  for (let x = grid.columns - 1; x >= 0; x--) {
+    if (grid.chars[row + x] !== ' ' || grid.styles[row + x] !== PLAIN_STYLE) return x + 1;
+  }
+  return 0;
 }
 
 const moveUp = (count: number): string => `${CSI}${String(count)}A`;
@@ -144,6 +167,12 @@ class Pen {
     this.column = end >= columns ? -1 : end;
   }
 
+  eraseLineEnd(): void {
+    // The reset comes first: an erase paints with the open background.
+    this.resetStyle();
+    this.out += ERASE_LINE_END;
+  }
+
   resetStyle(): void {
     if (this.open === '') return;
     this.out += RESET;
@@ -168,7 +197,8 @@ class Pen {
   }
 }
 
-function degrade(style: CellStyle, level: ColorLevel): CellStyle {
+/** The style as a terminal of `level` can show it. */
+export function degrade(style: CellStyle, level: ColorLevel): CellStyle {
   return {
     ...style,
     fg: style.fg === null ? null : downgrade(style.fg, level),
