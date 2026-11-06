@@ -181,6 +181,8 @@ describe('injectFocus', () => {
     await test.stdin.write('\x1b[9;5u');
     await test.stdin.write('\x1b\t');
     expect(test.lastFrame()).toBe('a-\nb-\nc-');
+    await test.stdin.press('tab');
+    expect(test.lastFrame()).toBe('a*\nb-\nc-');
   });
 
   it('takes the focus away on Escape (INK-FOCUS-06)', async () => {

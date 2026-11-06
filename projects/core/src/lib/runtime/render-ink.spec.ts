@@ -1140,6 +1140,7 @@ describe('public API', () => {
       [
         'INK_ELEMENTS',
         'InkBox',
+        'InkFocus',
         'InkNewline',
         'InkSpacer',
         'InkStatic',
@@ -1147,6 +1148,8 @@ describe('public API', () => {
         'InkTransform',
         'VERSION',
         'injectApp',
+        'injectFocus',
+        'injectFocusManager',
         'injectInput',
         'injectPaste',
         'injectStdin',

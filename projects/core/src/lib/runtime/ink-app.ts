@@ -62,6 +62,7 @@ export class InkApp implements InkRuntime {
   readonly stderr: NodeJS.WritableStream;
   readonly stdin: NodeJS.ReadableStream;
   readonly windowSize;
+  readonly inert = false;
 
   private readonly size = signal<WindowSize>({ columns: 0, rows: 0 });
   private readonly port: StreamPort;
@@ -350,8 +351,6 @@ export class InkApp implements InkRuntime {
       'angular-ink: renderInk() was called again for the same stdout before the previous instance was unmounted. Reusing stdout across renderInk() calls is unsupported; call unmount() first.\n',
     );
   }
-
-  readonly inert = false;
 
   get isRawModeSupported(): boolean {
     return this.rawMode.supported;

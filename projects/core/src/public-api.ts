@@ -35,6 +35,9 @@ export {
   type InputOptions,
   type StdinProps,
 } from './lib/input/inject-input';
+export { injectFocus, type FocusOptions, type FocusProps } from './lib/input/inject-focus';
+export { injectFocusManager, type FocusManagerProps } from './lib/input/focus-manager';
+export { InkFocus } from './lib/input/focus.directive';
 export type { Key } from './lib/input/key';
 export type { InkNode, InkNode as DOMElement } from './lib/tree/node';
 export { gridToString as ɵgridToString, type CellGrid as ɵCellGrid } from './lib/engine/grid';

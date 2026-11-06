@@ -1,4 +1,4 @@
-import { computed, Injectable, inject, signal, type OnDestroy, type Signal } from '@angular/core';
+import { Injectable, inject, signal, type OnDestroy, type Signal } from '@angular/core';
 import { InkRuntime } from '../runtime/inject';
 import type { Key } from './key';
 
@@ -39,8 +39,6 @@ export class FocusManager implements FocusManagerProps, OnDestroy {
     this.nextGeneratedId += 1;
     return `ink-focus-${String(this.nextGeneratedId)}`;
   }
-
-  readonly isFocused = (id: string): Signal<boolean> => computed(() => this.current() === id);
 
   register(id: string, autoFocus: boolean): void {
     if (this.runtime?.inert !== false) return;
