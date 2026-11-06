@@ -11,7 +11,7 @@
     "paths": {
       "@angular-ink/core": ["../../dist/core", "../core/src/public-api.ts"]
     },
-    "types": []
+    "types": ["node"]
   },
   "include": ["src/**/*.ts"],
   "exclude": ["**/*.spec.ts"]

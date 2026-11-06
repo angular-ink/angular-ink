@@ -16,6 +16,7 @@ export {
   type RenderOptions,
   type ɵFrameSink,
 } from './lib/runtime/render-ink';
+export { renderInkToString, type RenderToStringOptions } from './lib/runtime/render-to-string';
 export {
   injectApp,
   injectStderr,

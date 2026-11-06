@@ -1151,6 +1151,7 @@ describe('public API', () => {
         'injectStdout',
         'injectWindowSize',
         'renderInk',
+        'renderInkToString',
         'ɵgridToString',
       ].sort(),
     );

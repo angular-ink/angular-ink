@@ -4,7 +4,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   // Compiles Angular components in specs; plain TypeScript specs pass through untouched.
-  plugins: [angular({ tsconfig: 'projects/core/tsconfig.spec.json' })],
+  plugins: [angular({ tsconfig: 'tsconfig.vitest.json' })],
   resolve: {
     alias: [
       // Specs of both libraries import the core by its package name, from the sources.
