@@ -40,46 +40,27 @@ export function parseColor(value: unknown): Color | null {
   return null;
 }
 
-function parseHex(value: string): Color | null {
-  const digits = value.slice(1);
-  if (digits.length !== 3 && digits.length !== 6) return null;
+// The next three read a color as chalk does through Ink, which clamps nothing: a terminal gets
+// `rgb(256,0,0)` as it is. A number stops at 15 digits so that it always prints as digits.
+
+function parseHex(value: string): Color {
+  const digits = /[a-f\d]{6}|[a-f\d]{3}/i.exec(value)?.[0];
+  if (digits === undefined) return { kind: 'rgb', r: 0, g: 0, b: 0 };
   const width = digits.length / 3;
-  const channels: number[] = [];
-  for (let i = 0; i < 3; i++) {
+  const [r = 0, g = 0, b = 0] = [0, 1, 2].map((i) => {
     const part = digits.slice(i * width, (i + 1) * width);
-    if (!isHex(part)) return null;
-    channels.push(parseInt(width === 1 ? part + part : part, 16));
-  }
-  return { kind: 'rgb', r: channels[0] ?? 0, g: channels[1] ?? 0, b: channels[2] ?? 0 };
-}
-
-function isHex(text: string): boolean {
-  for (const char of text) {
-    if (!'0123456789abcdefABCDEF'.includes(char)) return false;
-  }
-  return true;
-}
-
-/** Reads a run of digits that fills the whole text. */
-function parseUint(text: string): number | null {
-  if (text === '' || text.length > 4) return null;
-  for (const char of text) {
-    if (char < '0' || char > '9') return null;
-  }
-  return Number(text);
+    return parseInt(width === 1 ? part + part : part, 16);
+  });
+  return { kind: 'rgb', r, g, b };
 }
 
 function parseAnsi256(value: string): Color | null {
-  if (!value.endsWith(')')) return null;
-  const index = parseUint(value.slice('ansi256('.length, -1).trim());
-  return index !== null && index <= 255 ? { kind: 'ansi256', index } : null;
+  const digits = /^ansi256\(\s?(\d{1,15})\s?\)$/.exec(value)?.[1];
+  return digits === undefined ? null : { kind: 'ansi256', index: Number(digits) };
 }
 
 function parseRgb(value: string): Color | null {
-  if (!value.endsWith(')')) return null;
-  const parts = value.slice('rgb('.length, -1).split(',');
-  if (parts.length !== 3) return null;
-  const [r, g, b] = parts.map((part) => parseUint(part.trim()));
-  if (r == null || g == null || b == null || r > 255 || g > 255 || b > 255) return null;
-  return { kind: 'rgb', r, g, b };
+  const channels = /^rgb\(\s*(\d{1,15})\s*,\s*(\d{1,15})\s*,\s*(\d{1,15})\s*\)$/.exec(value);
+  if (channels === null) return null;
+  return { kind: 'rgb', r: Number(channels[1]), g: Number(channels[2]), b: Number(channels[3]) };
 }

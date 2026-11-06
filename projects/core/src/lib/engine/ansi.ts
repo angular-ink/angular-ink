@@ -227,7 +227,8 @@ function readExtendedColor(parts: readonly string[], index: number): [Color | nu
   if (count === 0) return [null, index + 1];
   const values = parts.slice(index + 2, index + 2 + count).map(Number);
   const next = index + 2 + count;
-  if (values.length < count || values.some((value) => value > 255)) return [null, next];
+  // Past the safe integers a number prints as `1e+30`, which is no longer one parameter of a sequence.
+  if (values.length < count || !values.every(Number.isSafeInteger)) return [null, next];
   if (count === 1) return [{ kind: 'ansi256', index: values[0] ?? 0 }, next];
   return [{ kind: 'rgb', r: values[0] ?? 0, g: values[1] ?? 0, b: values[2] ?? 0 }, next];
 }

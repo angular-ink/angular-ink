@@ -152,3 +152,15 @@ describe('openSgr', () => {
     ).toBe('\x1b[2;91;44m');
   });
 });
+
+describe('parseAnsi with channels out of range', () => {
+  it('keeps them, as the terminal gets them through Ink', () => {
+    const [span] = parseAnsi('\x1b[38;2;300;0;0ma', PLAIN_STYLE);
+    expect(span?.style.fg).toEqual({ kind: 'rgb', r: 300, g: 0, b: 0 });
+  });
+
+  it('drops a number too long to print as digits', () => {
+    const [span] = parseAnsi(`\x1b[38;5;${'9'.repeat(30)}ma`, PLAIN_STYLE);
+    expect(span?.style.fg).toBeNull();
+  });
+});
