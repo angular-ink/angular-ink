@@ -49,9 +49,8 @@ export class RawMode {
     );
   }
 
-  /** Does nothing on a stream without raw mode. */
+  /** Only for a stream that is `supported`. */
   acquire(): void {
-    if (!this.supported) return;
     if (this.count === 0) {
       if (this.turningOff) this.turningOff = false;
       else this.turnOn();

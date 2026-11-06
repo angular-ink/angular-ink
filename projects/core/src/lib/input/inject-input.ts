@@ -1,4 +1,4 @@
-import { effect, isSignal, untracked, type Signal } from '@angular/core';
+import { effect, ElementRef, inject, isSignal, untracked, type Signal } from '@angular/core';
 import { injectRuntime, type InkRuntime } from '../runtime/inject';
 import type { KeyHandler, PasteHandler } from './input-bus';
 
@@ -9,7 +9,7 @@ export interface InputOptions {
 
 export interface StdinProps {
   readonly stdin: NodeJS.ReadableStream;
-  /** Counted. Does nothing where raw mode is not supported. */
+  /** Counted. Throws where raw mode is not supported: check `isRawModeSupported` first. */
   setRawMode(enabled: boolean): void;
   readonly isRawModeSupported: boolean;
 }
@@ -22,16 +22,23 @@ function whileActive(isActive: InputOptions['isActive'], listen: () => () => voi
   });
 }
 
+/** The node of the component calling, if a component is. */
+function injectHost(): object | null {
+  return (inject(ElementRef, { optional: true })?.nativeElement as object | undefined) ?? null;
+}
+
 /** Calls `handler` for each key press, with raw mode on while it is active. Without a TTY it warns. */
 export function injectInput(handler: KeyHandler, options: InputOptions = {}): void {
   const app: InkRuntime = injectRuntime('injectInput');
-  whileActive(options.isActive, () => app.listenToKeys(handler));
+  const host = injectHost();
+  whileActive(options.isActive, () => app.listenToKeys(handler, host));
 }
 
 /** Calls `handler` for each paste, whole, with bracketed paste on while it is active. */
 export function injectPaste(handler: PasteHandler, options: InputOptions = {}): void {
   const app: InkRuntime = injectRuntime('injectPaste');
-  whileActive(options.isActive, () => app.listenToPaste(handler));
+  const host = injectHost();
+  whileActive(options.isActive, () => app.listenToPaste(handler, host));
 }
 
 export function injectStdin(): StdinProps {

@@ -1,5 +1,5 @@
 import type { EnvironmentProviders, Provider, Type } from '@angular/core';
-import { signal } from '@angular/core';
+import { ApplicationRef, inject, provideEnvironmentInitializer, signal } from '@angular/core';
 import { Readable, Writable } from 'node:stream';
 import { gridToString, type CellGrid } from '../engine/grid';
 import { InkRuntime } from './inject';
@@ -61,6 +61,7 @@ export async function renderInkToString<T>(
 
   const shown: { frame: CellGrid | null; permanent: string } = { frame: null, permanent: '' };
   let stable = false;
+  let appRef: ApplicationRef | null = null;
   const instance = await renderInk(component, {
     stdout,
     stderr,
@@ -69,7 +70,13 @@ export async function renderInkToString<T>(
     patchConsole: false,
     inputs: options.inputs ?? {},
     // Last, so it wins over the runtime the app provides for itself.
-    providers: [...(options.providers ?? []), { provide: InkRuntime, useValue: inertRuntime }],
+    providers: [
+      ...(options.providers ?? []),
+      { provide: InkRuntime, useValue: inertRuntime },
+      provideEnvironmentInitializer(() => {
+        appRef = inject(ApplicationRef);
+      }),
+    ],
     ɵframeSink: (grid) => {
       if (!stable) shown.frame = grid;
     },
@@ -78,6 +85,11 @@ export async function renderInkToString<T>(
     },
   });
   try {
+    // A flush does not wait for pending tasks, and a tree that crashed never reports stable.
+    await Promise.race([
+      (appRef as ApplicationRef | null)?.whenStable(),
+      instance.waitUntilExit().catch(() => undefined),
+    ]);
     await instance.waitUntilRenderFlush();
     stable = true;
   } finally {

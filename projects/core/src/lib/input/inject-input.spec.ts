@@ -1,11 +1,14 @@
-import { Component, input, signal, type WritableSignal } from '@angular/core';
+import { Component, inject, input, PendingTasks, signal, type WritableSignal } from '@angular/core';
 import { cleanup, FakeStdin, renderForTest, type InkTestInstance } from '@angular-ink/testing';
+import { build } from 'esbuild';
 import { spawn } from 'node:child_process';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { PassThrough, Readable, Writable } from 'node:stream';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InkText } from '../elements';
-import { renderInk } from '../runtime/render-ink';
+import { renderInk, type Instance } from '../runtime/render-ink';
 import { renderInkToString } from '../runtime/render-to-string';
 import { injectApp } from '../runtime/inject';
 import { injectInput, injectPaste, injectStdin } from './inject-input';
@@ -201,6 +204,30 @@ class QuitKey {
       this.app.exit('done');
     });
   }
+}
+
+@Component({
+  selector: 'ink-test-busy',
+  imports: [Keys],
+  template: `<ink-test-keys />`,
+})
+class Busy {
+  static finish: () => void = () => undefined;
+
+  constructor() {
+    Busy.finish = inject(PendingTasks).add();
+  }
+}
+
+/** One component that notes its name for each key. */
+function noter(name: string, order: string[], selector: string): new () => unknown {
+  @Component({ selector, imports: [InkText], template: `<ink-text>{{ '' }}</ink-text>` })
+  class Noter {
+    constructor() {
+      injectInput(() => order.push(name));
+    }
+  }
+  return Noter;
 }
 
 const output = (test: InkTestInstance): string => test.stdout.writes.join('');
@@ -423,6 +450,13 @@ describe('injectInput', () => {
       expect(seen).toEqual([]);
     });
 
+    it('with exitOnCtrlC still delivers the keys before it, in order', async () => {
+      const test = await renderForTest(Keys, { exitOnCtrlC: true });
+      await test.stdin.write('a\x03');
+      await test.waitUntilExit();
+      expect(seen.map(({ input: text }) => text)).toEqual(['a']);
+    });
+
     it('with exitOnCtrlC drops the rest of the chunk', async () => {
       const test = await renderForTest(Keys, { exitOnCtrlC: true });
       await test.stdin.write('\x03abc');
@@ -469,11 +503,194 @@ describe('injectInput', () => {
       expect(test.lastFrame()).toBe('row 2');
     });
 
+    it('a handler can unmount the app there and then', async () => {
+      const stdin = new FakeStdin();
+      let app: Instance | null = null;
+      @Component({
+        selector: 'ink-test-unmounter',
+        imports: [InkText],
+        template: `<ink-text>u</ink-text>`,
+      })
+      class Unmounter {
+        constructor() {
+          injectInput(() => {
+            app?.unmount();
+          });
+        }
+      }
+      app = await renderInk(Unmounter, {
+        stdout: new Sink(),
+        stderr: new Sink(),
+        stdin: stdin as unknown as NodeJS.ReadableStream,
+        patchConsole: false,
+      });
+      await stdin.write('x');
+      await expect(app.waitUntilExit()).resolves.toBeUndefined();
+    });
+
     it('stops at exit, and the keys left in the batch are dropped', async () => {
       const test = await renderForTest(QuitKey);
       await test.stdin.write('\x1b[A\x1b[B');
       await expect(test.waitUntilExit()).resolves.toBe('done');
       expect(seen).toHaveLength(1);
+    });
+  });
+
+  describe('while a task is pending', () => {
+    afterEach(() => {
+      Busy.finish();
+    });
+
+    it('keys and frames do not wait for it', async () => {
+      const test = await renderForTest(Busy);
+      await test.stdin.press('up', 'down');
+      await test.stdin.write('\x1b[A\x1b[B');
+      expect(seen).toHaveLength(4);
+      expect(test.lastFrame()).toBe('keys 4');
+    });
+
+    it('Ctrl+C still ends the app', async () => {
+      const test = await renderForTest(Busy, { exitOnCtrlC: true });
+      await test.stdin.press('ctrl+c');
+      await expect(test.waitUntilExit()).resolves.toBeUndefined();
+    });
+  });
+
+  describe('order across components (children first, as React effects run)', () => {
+    it('a child gets the key before its parent', async () => {
+      const order: string[] = [];
+      const Child = noter('child', order, 'ink-test-child');
+      @Component({
+        selector: 'ink-test-parent',
+        imports: [Child],
+        template: `<ink-test-child />`,
+      })
+      class Parent {
+        constructor() {
+          injectInput(() => order.push('parent'));
+        }
+      }
+      const test = await renderForTest(Parent);
+      await test.stdin.write('x');
+      expect(order).toEqual(['child', 'parent']);
+    });
+
+    it('goes depth first over siblings', async () => {
+      const order: string[] = [];
+      const LeafA = noter('a', order, 'ink-test-leaf-a');
+      const LeafB = noter('b', order, 'ink-test-leaf-b');
+      const LeafC = noter('c', order, 'ink-test-leaf-c');
+      @Component({
+        selector: 'ink-test-branch',
+        imports: [LeafA, LeafB],
+        template: `<ink-test-leaf-a /><ink-test-leaf-b />`,
+      })
+      class Branch {
+        constructor() {
+          injectInput(() => order.push('branch'));
+        }
+      }
+      @Component({
+        selector: 'ink-test-root',
+        imports: [Branch, LeafC],
+        template: `<ink-test-branch /><ink-test-leaf-c />`,
+      })
+      class Root {
+        constructor() {
+          injectInput(() => order.push('root'));
+        }
+      }
+      const test = await renderForTest(Root);
+      await test.stdin.write('x');
+      expect(order).toEqual(['a', 'b', 'branch', 'c', 'root']);
+    });
+
+    it('a component mounted later comes after, and so does one turned back on', async () => {
+      const order: string[] = [];
+      const show = signal(false);
+      const again = signal(true);
+      const Late = noter('late', order, 'ink-test-late');
+      @Component({
+        selector: 'ink-test-early',
+        imports: [InkText],
+        template: `<ink-text>e</ink-text>`,
+      })
+      class Early {
+        constructor() {
+          injectInput(() => order.push('early'), { isActive: again });
+        }
+      }
+      @Component({
+        selector: 'ink-test-host',
+        imports: [Early, Late],
+        template: `<ink-test-early />
+          @if (show()) {
+            <ink-test-late />
+          }`,
+      })
+      class Host {
+        readonly show = show;
+
+        constructor() {
+          injectInput(() => order.push('host'));
+        }
+      }
+      const test = await renderForTest(Host);
+      show.set(true);
+      await test.rerender({});
+      await test.stdin.write('x');
+      expect(order).toEqual(['early', 'host', 'late']);
+      order.length = 0;
+      again.set(false);
+      await test.rerender({});
+      again.set(true);
+      await test.rerender({});
+      await test.stdin.write('x');
+      expect(order).toEqual(['host', 'late', 'early']);
+    });
+
+    it('keeps the order of two handlers in one component, for keys and for pastes', async () => {
+      const order: string[] = [];
+      @Component({
+        selector: 'ink-test-pair',
+        imports: [InkText],
+        template: `<ink-text>p</ink-text>`,
+      })
+      class Pair {
+        constructor() {
+          injectInput(() => order.push('key 1'));
+          injectInput(() => order.push('key 2'));
+          injectPaste(() => order.push('paste 1'));
+          injectPaste(() => order.push('paste 2'));
+        }
+      }
+      const test = await renderForTest(Pair);
+      await test.stdin.write('x');
+      await test.stdin.write('\x1b[200~y\x1b[201~');
+      expect(order).toEqual(['key 1', 'key 2', 'paste 1', 'paste 2']);
+    });
+  });
+
+  describe('another component on the same stdout', () => {
+    it('takes over the keyboard', async () => {
+      const stdin = new FakeStdin();
+      const stdout = new Sink();
+      const stderr = new Sink();
+      const setRawMode = vi.spyOn(stdin, 'setRawMode');
+      const options = {
+        stdout,
+        stderr,
+        stdin: stdin as unknown as NodeJS.ReadableStream,
+        patchConsole: false,
+      };
+      vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      const first = await renderInk(Keys, options);
+      await stdin.write('a');
+      await renderInk(QuitKey, options);
+      expect(setRawMode).toHaveBeenCalledTimes(1);
+      await stdin.write('b');
+      await expect(first.waitUntilExit()).resolves.toBe('done');
+      expect(seen.map(({ input: text }) => text)).toEqual(['a', 'b']);
     });
   });
 
@@ -515,14 +732,33 @@ describe('injectInput', () => {
       expect(output(test)).not.toContain(PASTE_ON);
     });
 
-    it('reports raw mode as unsupported, and setRawMode does nothing', async () => {
+    it('warns once per render, whichever functions are used', async () => {
+      @Component({
+        selector: 'ink-test-both',
+        imports: [InkText],
+        template: `<ink-text>x</ink-text>`,
+      })
+      class InputAndPaste {
+        constructor() {
+          injectInput(() => undefined);
+          injectPaste(() => undefined);
+        }
+      }
+      const test = await renderForTest(InputAndPaste, { isTty: false });
+      expect(test.stderr.writes).toEqual([NOT_A_TTY]);
+    });
+
+    it('reports raw mode as unsupported, and setRawMode throws, as in Ink 8.0.0', async () => {
       const test = await renderForTest(StdinProbe, { isTty: false });
       const { terminal } = StdinProbe.last;
       expect(terminal.isRawModeSupported).toBe(false);
       expect(terminal.stdin).toBe(test.stdin);
       expect(() => {
         terminal.setRawMode(true);
-      }).not.toThrow();
+      }).toThrow(/^angular-ink: raw mode is not supported/);
+      expect(() => {
+        terminal.setRawMode(false);
+      }).toThrow(/^angular-ink: raw mode is not supported/);
       expect(test.stdin.isRaw).toBe(false);
     });
 
@@ -544,7 +780,74 @@ describe('injectInput', () => {
       await expect(exited).resolves.toBeUndefined();
     });
 
+    it('a whole app on a held-open pipe, with no TTY, ends by itself', async () => {
+      const here = dirname(fileURLToPath(import.meta.url));
+      // Beside node_modules, so that the bundle finds its packages.
+      const folder = await mkdtemp(join(here, '../../../../../node_modules/.cache-ink-no-tty-'));
+      const bundle = join(folder, 'app.mjs');
+      try {
+        await build({
+          stdin: {
+            contents: `
+              import '@angular/compiler';
+              import { Component } from '@angular/core';
+              import { InkText, injectInput, renderInk } from '../../public-api';
+
+              @Component({
+                selector: 'ink-no-tty',
+                imports: [InkText],
+                template: '<ink-text>frame</ink-text>',
+              })
+              class App {
+                constructor() {
+                  injectInput(() => undefined);
+                }
+              }
+
+              const app = await renderInk(App, { patchConsole: false });
+              await app.waitUntilExit();
+              process.stdout.write('ended');
+            `,
+            resolveDir: here,
+            loader: 'ts',
+          },
+          bundle: true,
+          format: 'esm',
+          platform: 'node',
+          packages: 'external',
+          outfile: bundle,
+          tsconfigRaw: { compilerOptions: { experimentalDecorators: true } },
+          logLevel: 'silent',
+        });
+        const child = spawn(process.execPath, [bundle], { stdio: 'pipe' });
+        let stdout = '';
+        let stderr = '';
+        child.stdout.on('data', (data: Buffer) => (stdout += data.toString()));
+        child.stderr.on('data', (data: Buffer) => (stderr += data.toString()));
+        // Our end of its stdin stays open, as with a producer that is slow to finish.
+        const code = await new Promise((resolve, reject) => {
+          const limit = setTimeout(() => {
+            child.kill();
+            reject(new Error(`the app was kept alive: ${stderr}`));
+          }, 15_000);
+          child.on('close', (exitCode) => {
+            clearTimeout(limit);
+            resolve(exitCode);
+          });
+        });
+        child.stdin.destroy();
+        expect(stderr).toContain(NOT_A_TTY);
+        expect(stdout).toContain('frame');
+        expect(stdout).toContain('ended');
+        expect(code).toBe(0);
+      } finally {
+        await rm(folder, { recursive: true, force: true });
+      }
+    }, 30_000);
+
     it('without a handler, a real pipe does not keep the process alive', async () => {
+      // Imports TypeScript straight into Node, which needs its type stripping: on by default from
+      // Node 23.6 and 22.18. So raw-mode.ts must stay free of syntax that only compiles.
       const module = fileURLToPath(new URL('./raw-mode.ts', import.meta.url));
       const script = `
         import { RawMode } from ${JSON.stringify(module)};

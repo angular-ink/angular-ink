@@ -68,9 +68,10 @@ Input arrives in arbitrary chunks, so the parser keeps its state between them. I
 no regex that can backtrack, and an incomplete sequence is bounded by `MAX_SEQUENCE_BYTES`. `key.ts`
 says what the bytes of one sequence mean; the state machine only says where a sequence ends.
 
-`InputBus` hands the events out one at a time and waits for the app to settle after each, so every
-key sees the state the previous one left. That is the pressure for a queue: a parser emits a whole
-chunk at once, and change detection is asynchronous.
+`InputBus` hands each event to the handlers as the parser emits it, and change detection runs once
+after each, so every key sees the state the previous one left. Nothing waits for the app to be
+stable: a pending task never holds back a key. Handlers run in the order of Ink's effects, children
+first, so the bus sorts the ones that arrive in one change detection by their place in the tree.
 
 ### Trees: plain data with explicit traversal
 

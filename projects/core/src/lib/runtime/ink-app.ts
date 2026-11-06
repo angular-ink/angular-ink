@@ -98,7 +98,7 @@ export class InkApp implements InkRuntime {
   private restored = false;
   private warnedAboutReuse = false;
   private warnedAboutStatics = false;
-  private readonly warnedAboutInput = new Set<string>();
+  private warnedAboutInput = false;
   private warnedAboutPaste = false;
   /** How many paste handlers keep bracketed paste on. */
   private pasteListeners = 0;
@@ -138,10 +138,14 @@ export class InkApp implements InkRuntime {
       onExitKey: () => {
         this.exit();
       },
-      settle: () => this.tree?.whenStable() ?? Promise.resolve(),
+      afterEvent: () => {
+        // A handler may have unmounted the app.
+        if (this.phase === 'running') this.runChangeDetection();
+      },
       onError: (error) => {
         this.fail(error);
       },
+      root: () => this.tree?.root ?? null,
     });
     this.parser = new KeyParser(
       (event) => {
@@ -202,7 +206,7 @@ export class InkApp implements InkRuntime {
       this.tree = null;
       this.component = component;
       this.warnedAboutStatics = false;
-      this.warnedAboutInput.clear();
+      this.warnedAboutInput = false;
       this.warnedAboutPaste = false;
       this.tree = mountTree(component, {
         inputs,
@@ -242,6 +246,8 @@ export class InkApp implements InkRuntime {
   exit(errorOrResult?: unknown): void {
     if (this.phase !== 'running' || this.exitRequested) return;
     this.exitRequested = true;
+    // The keys left in the chunk come after the end of the app.
+    this.inputBus.stop();
     if (isError(errorOrResult)) this.exitError = errorOrResult;
     else this.result = errorOrResult;
     // A component can call this during change detection, when the tree cannot be destroyed.
@@ -296,7 +302,6 @@ export class InkApp implements InkRuntime {
         setImmediate(resolve);
       });
     }
-    if (this.phase === 'running') await this.inputBus.idle();
     if (this.phase !== 'running') {
       await this.exitPromise.catch(() => undefined);
       return;
@@ -352,13 +357,18 @@ export class InkApp implements InkRuntime {
 
   setRawMode(enabled: boolean): void {
     if (this.phase !== 'running') return;
+    if (!this.rawMode.supported) {
+      throw new Error(
+        'angular-ink: raw mode is not supported on this stdin; check isRawModeSupported first',
+      );
+    }
     if (enabled) this.rawMode.acquire();
     else this.rawMode.release();
   }
 
-  listenToKeys(handler: KeyHandler): () => void {
+  listenToKeys(handler: KeyHandler, host: object | null): () => void {
     if (!this.canListen('injectInput')) return noop;
-    const stop = this.inputBus.onKey(handler);
+    const stop = this.inputBus.onKey(handler, host);
     this.rawMode.acquire();
     return () => {
       stop();
@@ -366,9 +376,9 @@ export class InkApp implements InkRuntime {
     };
   }
 
-  listenToPaste(handler: PasteHandler): () => void {
+  listenToPaste(handler: PasteHandler, host: object | null): () => void {
     if (!this.canListen('injectPaste')) return noop;
-    const stop = this.inputBus.onPaste(handler);
+    const stop = this.inputBus.onPaste(handler, host);
     this.rawMode.acquire();
     this.pasteListeners += 1;
     this.setBracketedPaste(true);
@@ -383,8 +393,8 @@ export class InkApp implements InkRuntime {
   private canListen(caller: string): boolean {
     if (this.phase !== 'running') return false;
     if (this.rawMode.supported) return true;
-    if (!this.warnedAboutInput.has(caller) && isDevMode()) {
-      this.warnedAboutInput.add(caller);
+    if (!this.warnedAboutInput && isDevMode()) {
+      this.warnedAboutInput = true;
       this.writeStderr(`angular-ink: stdin is not a TTY; ${caller} is inactive\n`);
     }
     return false;
@@ -405,6 +415,7 @@ export class InkApp implements InkRuntime {
 
   private fail(error: unknown): void {
     this.crash ??= toError(error);
+    this.inputBus.stop();
     if (this.phase !== 'running') return;
     queueMicrotask(() => {
       this.unmount();

@@ -13,10 +13,10 @@ export abstract class InkRuntime {
   abstract readonly stdin: NodeJS.ReadableStream;
   abstract readonly isRawModeSupported: boolean;
   abstract setRawMode(enabled: boolean): void;
-  /** Returns how to stop. */
-  abstract listenToKeys(handler: KeyHandler): () => void;
-  /** Returns how to stop. */
-  abstract listenToPaste(handler: PasteHandler): () => void;
+  /** Returns how to stop. `host` is the node of the component, which orders the handlers. */
+  abstract listenToKeys(handler: KeyHandler, host: object | null): () => void;
+  /** Returns how to stop. `host` is the node of the component, which orders the handlers. */
+  abstract listenToPaste(handler: PasteHandler, host: object | null): () => void;
 }
 
 export interface WindowSize {

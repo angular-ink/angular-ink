@@ -1,4 +1,4 @@
-import { Component, input, signal } from '@angular/core';
+import { Component, inject, input, PendingTasks, signal } from '@angular/core';
 import { describe, expect, it, vi } from 'vitest';
 import { InkBox, InkStatic, InkText } from '../elements';
 import { injectApp, injectStderr, injectStdout, injectWindowSize } from './inject';
@@ -134,5 +134,28 @@ describe('renderInkToString', () => {
     const before = process.listenerCount('exit');
     await expect(renderInkToString(Broken)).rejects.toThrow('boom');
     expect(process.listenerCount('exit')).toBe(before);
+  });
+});
+
+@Component({
+  selector: 'ink-test-loading',
+  imports: [InkText],
+  template: `<ink-text>{{ state() }}</ink-text>`,
+})
+class Loading {
+  readonly state = signal('loading');
+
+  constructor() {
+    const finish = inject(PendingTasks).add();
+    setTimeout(() => {
+      this.state.set('loaded');
+      finish();
+    }, 5);
+  }
+}
+
+describe('renderInkToString and pending tasks', () => {
+  it('waits for the app to be stable (INK-R2S-04)', async () => {
+    await expect(renderInkToString(Loading)).resolves.toBe('loaded');
   });
 });

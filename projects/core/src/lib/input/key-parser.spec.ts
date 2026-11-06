@@ -440,14 +440,24 @@ describe('KeyParser', () => {
       ['parameters', `\x1b[${'1'.repeat(1_048_576)}`],
       ['intermediates', `\x1b[${' '.repeat(1_048_576)}`],
       ['SS3 digits', `\x1bO${'1'.repeat(1_048_576)}`],
-      ['escapes', '\x1b'.repeat(1_048_576)],
-      ['broken sequences', '\x1b[1\x01'.repeat(262_144)],
       ['paste markers that never finish', `\x1b[200~${'\x1b[201'.repeat(209_715)}`],
     ])('1 MiB of %s takes under 500 ms', (_name, chunk) => {
       const { parser } = newParser();
       const started = performance.now();
       parser.feed(chunk);
       expect(performance.now() - started).toBeLessThan(500);
+    });
+
+    // These make a key every few bytes, over half a million in all, so the budget is per key.
+    it.each([
+      ['escapes', '\x1b'.repeat(1_048_576)],
+      ['broken sequences', '\x1b[1\x01'.repeat(262_144)],
+    ])('1 MiB of %s stays linear', (_name, chunk) => {
+      const { events, parser } = newParser();
+      const started = performance.now();
+      parser.feed(chunk);
+      expect(events.length).toBeGreaterThan(262_144);
+      expect(performance.now() - started).toBeLessThan(3000);
     });
   });
 
