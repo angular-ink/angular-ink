@@ -351,6 +351,8 @@ export class InkApp implements InkRuntime {
     );
   }
 
+  readonly inert = false;
+
   get isRawModeSupported(): boolean {
     return this.rawMode.supported;
   }

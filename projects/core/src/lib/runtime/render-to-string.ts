@@ -54,6 +54,7 @@ export async function renderInkToString<T>(
     writeStderr: () => undefined,
     stdin,
     isRawModeSupported: false,
+    inert: true,
     setRawMode: () => undefined,
     listenToKeys: () => () => undefined,
     listenToPaste: () => () => undefined,

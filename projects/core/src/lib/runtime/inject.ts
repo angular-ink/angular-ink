@@ -12,6 +12,8 @@ export abstract class InkRuntime {
   abstract writeStderr(data: string): void;
   abstract readonly stdin: NodeJS.ReadableStream;
   abstract readonly isRawModeSupported: boolean;
+  /** True where nothing is live (`renderInkToString`): focus does not track anything there. */
+  abstract readonly inert: boolean;
   abstract setRawMode(enabled: boolean): void;
   /** Returns how to stop. `host` is the node of the component, which orders the handlers. */
   abstract listenToKeys(handler: KeyHandler, host: object | null): () => void;
